@@ -1,0 +1,157 @@
+{
+  "method": "centralized",
+  "rounds": 100,
+  "client_sizes": [
+    300,
+    300,
+    300,
+    300,
+    300
+  ],
+  "processed_samples": 150000,
+  "expected_processed_samples": 150000,
+  "best_rounds": [
+    36
+  ],
+  "test_accuracy": 0.6753215817055741,
+  "test_accuracy_std": 0.0,
+  "test_macro_f1": 0.5278634885211021,
+  "test_details": [
+    {
+      "uav": null,
+      "selected_round": 36,
+      "loss": 0.9199131669857321,
+      "accuracy": 0.6753215817055741,
+      "macro_f1": 0.5278634885211021,
+      "samples": 4198,
+      "class_f1": [
+        0.0,
+        0.5634005763688761,
+        0.8347639484978541,
+        0.552212389380531,
+        0.6786786786786787,
+        0.5215759849906192,
+        0.8063241106719368,
+        0.07272727272727272,
+        0.7210884353741497
+      ],
+      "class_support": [
+        27,
+        767,
+        884,
+        238,
+        506,
+        572,
+        386,
+        91,
+        727
+      ],
+      "confusion_matrix": [
+        [
+          0,
+          2,
+          6,
+          10,
+          3,
+          2,
+          2,
+          1,
+          1
+        ],
+        [
+          0,
+          391,
+          82,
+          21,
+          6,
+          32,
+          28,
+          1,
+          206
+        ],
+        [
+          0,
+          35,
+          778,
+          33,
+          2,
+          12,
+          3,
+          4,
+          17
+        ],
+        [
+          0,
+          7,
+          27,
+          156,
+          10,
+          23,
+          0,
+          4,
+          11
+        ],
+        [
+          0,
+          11,
+          12,
+          22,
+          339,
+          111,
+          7,
+          1,
+          3
+        ],
+        [
+          1,
+          36,
+          30,
+          59,
+          124,
+          278,
+          16,
+          4,
+          24
+        ],
+        [
+          0,
+          19,
+          6,
+          1,
+          6,
+          15,
+          306,
+          0,
+          33
+        ],
+        [
+          0,
+          34,
+          20,
+          18,
+          0,
+          2,
+          1,
+          4,
+          12
+        ],
+        [
+          0,
+          86,
+          19,
+          7,
+          3,
+          19,
+          10,
+          0,
+          583
+        ]
+      ]
+    }
+  ],
+  "evaluation": "selected global model",
+  "training_payload_bytes": 0,
+  "payload_scope": "estimated activation/label/gradient and same-cut aggregation upload+download; excludes cut migration, initialization, dataset collection, protocol and evaluation",
+  "wall_seconds": 397.41173669998534,
+  "output": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\centralized\\20261013_210633_581235_seed42"
+}

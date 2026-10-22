@@ -1,0 +1,18 @@
+# Python 运行缓存不提交。
+__pycache__/
+*.py[cod]
+
+# 默认忽略 output 内容，但允许 Git 遍历子目录，再放行下列训练结果。
+# 以后正常 git add . 即可提交这些结果，无需 git add -f。
+output/**
+!output/**/
+!output/**/config.json
+!output/**/history.csv
+!output/**/summary.json
+!output/**/data_manifest.json
+!output/**/split_profile.json
+!output/**/split_schedule.json
+!output/**/resource_history.json
+
+# 裁剪图片缓存始终忽略；data.json、best.pt、last.pt 等仍被 output/** 忽略。
+output/**/crops/

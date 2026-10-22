@@ -1,0 +1,80 @@
+{
+  "profiles": {
+    "P0": {
+      "client_flops_per_sample": 38535168.0,
+      "server_flops_per_sample": 830499840.0,
+      "activation_bytes_per_sample": 65536.0,
+      "gradient_bytes_per_sample": 65536.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 38664
+    },
+    "P1": {
+      "client_flops_per_sample": 151781376.0,
+      "server_flops_per_sample": 717253632.0,
+      "activation_bytes_per_sample": 65536.0,
+      "gradient_bytes_per_sample": 65536.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 335640
+    },
+    "P2": {
+      "client_flops_per_sample": 265027584.0,
+      "server_flops_per_sample": 604007424.0,
+      "activation_bytes_per_sample": 65536.0,
+      "gradient_bytes_per_sample": 65536.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 632616
+    },
+    "P3": {
+      "client_flops_per_sample": 353107968.0,
+      "server_flops_per_sample": 515927040.0,
+      "activation_bytes_per_sample": 32768.0,
+      "gradient_bytes_per_sample": 32768.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 1556288
+    },
+    "P4": {
+      "client_flops_per_sample": 466354176.0,
+      "server_flops_per_sample": 402680832.0,
+      "activation_bytes_per_sample": 32768.0,
+      "gradient_bytes_per_sample": 32768.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 2740048
+    },
+    "P5": {
+      "client_flops_per_sample": 554434560.0,
+      "server_flops_per_sample": 314600448.0,
+      "activation_bytes_per_sample": 16384.0,
+      "gradient_bytes_per_sample": 16384.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 6422376
+    },
+    "P6": {
+      "client_flops_per_sample": 667680768.0,
+      "server_flops_per_sample": 201354240.0,
+      "activation_bytes_per_sample": 16384.0,
+      "gradient_bytes_per_sample": 16384.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 11149176
+    },
+    "P7": {
+      "client_flops_per_sample": 755761152.0,
+      "server_flops_per_sample": 113273856.0,
+      "activation_bytes_per_sample": 8192.0,
+      "gradient_bytes_per_sample": 8192.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 25853840
+    },
+    "P8": {
+      "client_flops_per_sample": 869007360.0,
+      "server_flops_per_sample": 27648.0,
+      "activation_bytes_per_sample": 8192.0,
+      "gradient_bytes_per_sample": 8192.0,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 44744608
+    }
+  },
+  "cost_model": "D*(Cc/Fu+Cs/Fs+8*(A+G+label)/bandwidth)+16*M/(bandwidth*K)",
+  "objective": "minimum_modeled_latency",
+  "energy_measured": false,
+  "scope": "covered forward/backward operator FLOPs and modeled serial per-UAV latency; excludes optimizer updates, uncovered operators (such as BN), data loading, device/cut migration, wireless protocol and queueing cost"
+}

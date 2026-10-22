@@ -1,0 +1,49 @@
+{
+  "data": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\data_full\\data.json",
+  "mode": "holdout",
+  "epochs": 100,
+  "batch_size": 32,
+  "eval_batch_size": 64,
+  "lr": 0.01,
+  "momentum": 0.9,
+  "weight_decay": 0.0005,
+  "bn": "batch",
+  "image_size": 64,
+  "seed": 42,
+  "device": "auto",
+  "cpu_threads": 1,
+  "workers": 0,
+  "checkpoint": null,
+  "backbone_only": false,
+  "output": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\resnet18_full_100",
+  "method": "resnet18_full",
+  "device_resolved": "cuda",
+  "classes": [
+    "bicycle",
+    "building",
+    "car",
+    "pedestrian",
+    "road",
+    "sidewalk",
+    "sky",
+    "store",
+    "tree"
+  ],
+  "manifest_sha256": "63ed18a2f90021f96ccdd0922e7a526237a86ebed33371e17ebef84784fdb64f",
+  "dataset": "CBCL StreetScenes",
+  "dataset_samples": 27662,
+  "training_samples": 19365,
+  "source_subset_counts": {
+    "train": 19365,
+    "val": 4099,
+    "test": 4198
+  },
+  "training_subsets": [
+    "train"
+  ],
+  "torch": "2.11.0+cu126",
+  "optimizer": "SGD with momentum and weight decay",
+  "scheduler": "CosineAnnealingLR",
+  "selection": "maximum val accuracy; minimum loss on ties",
+  "evaluation": "held-out test accuracy of the model selected by validation accuracy"
+}

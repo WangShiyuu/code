@@ -1,0 +1,5 @@
+# 安装指令：python -m pip install -r requirements.txt
+# CPU/GPU 均可使用；GPU 版 torch 请按自己的 CUDA 环境安装。
+torch>=2.5
+numpy>=1.24
+Pillow>=10.0

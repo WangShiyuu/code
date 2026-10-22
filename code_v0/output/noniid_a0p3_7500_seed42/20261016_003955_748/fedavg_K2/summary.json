@@ -1,0 +1,175 @@
+{
+  "method": "fedavg",
+  "rounds": 100,
+  "client_sizes": [
+    1500,
+    1500,
+    1500,
+    1500,
+    1500
+  ],
+  "processed_samples": 750000,
+  "expected_processed_samples": 750000,
+  "best_rounds": [
+    70
+  ],
+  "early_stopping": false,
+  "best_val_accuracies": [
+    0.7950719687728715
+  ],
+  "best_val_losses": [
+    0.852413637226865
+  ],
+  "bn": "batch",
+  "lr": 0.01,
+  "momentum": 0.9,
+  "weight_decay": 0.0005,
+  "scheduler": "cosine",
+  "model_selection": "maximum validation accuracy; minimum validation loss on ties",
+  "momentum_policy": "reset local momentum after each model aggregation/broadcast",
+  "bn_aggregation": "sample-weighted floating BN buffers; integer counters use maximum",
+  "test_accuracy": 0.7806098141972367,
+  "test_accuracy_std": 0.0,
+  "test_macro_f1": 0.6428258618368984,
+  "test_details": [
+    {
+      "uav": null,
+      "selected_round": 70,
+      "loss": 0.8987372754130152,
+      "accuracy": 0.7806098141972367,
+      "macro_f1": 0.6428258618368984,
+      "samples": 4198,
+      "class_f1": [
+        0.05128205128205128,
+        0.6892655367231638,
+        0.9297358066329399,
+        0.7386609071274298,
+        0.7733071638861629,
+        0.7063903281519862,
+        0.8840764331210191,
+        0.22580645161290322,
+        0.786908077994429
+      ],
+      "class_support": [
+        27,
+        767,
+        884,
+        238,
+        506,
+        572,
+        386,
+        91,
+        727
+      ],
+      "confusion_matrix": [
+        [
+          1,
+          5,
+          5,
+          9,
+          1,
+          3,
+          1,
+          0,
+          2
+        ],
+        [
+          3,
+          549,
+          27,
+          6,
+          7,
+          36,
+          27,
+          10,
+          102
+        ],
+        [
+          1,
+          22,
+          827,
+          8,
+          6,
+          13,
+          2,
+          2,
+          3
+        ],
+        [
+          2,
+          22,
+          13,
+          171,
+          6,
+          15,
+          0,
+          4,
+          5
+        ],
+        [
+          2,
+          9,
+          4,
+          7,
+          394,
+          90,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          34,
+          6,
+          16,
+          90,
+          409,
+          7,
+          0,
+          10
+        ],
+        [
+          0,
+          13,
+          2,
+          0,
+          3,
+          5,
+          347,
+          1,
+          15
+        ],
+        [
+          1,
+          52,
+          8,
+          5,
+          0,
+          3,
+          1,
+          14,
+          7
+        ],
+        [
+          2,
+          120,
+          3,
+          3,
+          6,
+          12,
+          14,
+          2,
+          565
+        ]
+      ]
+    }
+  ],
+  "evaluation": "selected global model",
+  "training_payload_bytes": 22381538000,
+  "payload_scope": "estimated activation/label/gradient and same-cut aggregation upload+download; excludes optimizer state, cut migration, initialization, dataset collection, protocol and evaluation",
+  "training_seconds": 640.4690029004123,
+  "timing_scope": "single-process simulation on this host; training_seconds includes data loading, device transfers and aggregation; wall_seconds also includes profiling, validation, final testing and checkpoint/output I/O",
+  "energy_measured": false,
+  "wall_seconds": 755.6261084999423,
+  "output": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\noniid_a0p3_7500_seed42\\20261016_003955_748\\fedavg_K2"
+}

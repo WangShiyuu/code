@@ -1,0 +1,175 @@
+{
+  "method": "centralized",
+  "rounds": 100,
+  "client_sizes": [
+    1500,
+    1500,
+    1500,
+    1500,
+    1500
+  ],
+  "processed_samples": 750000,
+  "expected_processed_samples": 750000,
+  "best_rounds": [
+    90
+  ],
+  "early_stopping": false,
+  "best_val_accuracies": [
+    0.8299585264698707
+  ],
+  "best_val_losses": [
+    0.7961627185766392
+  ],
+  "bn": "batch",
+  "lr": 0.01,
+  "momentum": 0.9,
+  "weight_decay": 0.0005,
+  "scheduler": "cosine",
+  "model_selection": "maximum validation accuracy; minimum validation loss on ties",
+  "momentum_policy": "retain momentum across epochs",
+  "bn_aggregation": "sample-weighted floating BN buffers; integer counters use maximum",
+  "test_accuracy": 0.8094330633635064,
+  "test_accuracy_std": 0.0,
+  "test_macro_f1": 0.6704727367212445,
+  "test_details": [
+    {
+      "uav": null,
+      "selected_round": 90,
+      "loss": 0.9075057344132234,
+      "accuracy": 0.8094330633635064,
+      "macro_f1": 0.6704727367212445,
+      "samples": 4198,
+      "class_f1": [
+        0.06060606060606061,
+        0.720560152768937,
+        0.9430985915492958,
+        0.8185654008438819,
+        0.8110161443494777,
+        0.7657657657657657,
+        0.8961038961038961,
+        0.22580645161290322,
+        0.7927321668909825
+      ],
+      "class_support": [
+        27,
+        767,
+        884,
+        238,
+        506,
+        572,
+        386,
+        91,
+        727
+      ],
+      "confusion_matrix": [
+        [
+          1,
+          4,
+          4,
+          9,
+          2,
+          4,
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          566,
+          16,
+          3,
+          4,
+          19,
+          18,
+          14,
+          126
+        ],
+        [
+          0,
+          15,
+          837,
+          10,
+          5,
+          9,
+          1,
+          0,
+          7
+        ],
+        [
+          3,
+          13,
+          13,
+          194,
+          6,
+          4,
+          0,
+          1,
+          4
+        ],
+        [
+          0,
+          4,
+          5,
+          5,
+          427,
+          61,
+          2,
+          0,
+          2
+        ],
+        [
+          0,
+          16,
+          7,
+          11,
+          99,
+          425,
+          4,
+          0,
+          10
+        ],
+        [
+          0,
+          21,
+          0,
+          0,
+          2,
+          5,
+          345,
+          0,
+          13
+        ],
+        [
+          1,
+          54,
+          7,
+          3,
+          0,
+          4,
+          1,
+          14,
+          7
+        ],
+        [
+          0,
+          111,
+          2,
+          1,
+          2,
+          7,
+          12,
+          3,
+          589
+        ]
+      ]
+    }
+  ],
+  "evaluation": "selected global model",
+  "training_payload_bytes": 0,
+  "payload_scope": "estimated activation/label/gradient and same-cut aggregation upload+download; excludes optimizer state, cut migration, initialization, dataset collection, protocol and evaluation",
+  "training_seconds": 936.9504078999162,
+  "timing_scope": "single-process simulation on this host; training_seconds includes data loading, device transfers and aggregation; wall_seconds also includes profiling, validation, final testing and checkpoint/output I/O",
+  "energy_measured": false,
+  "wall_seconds": 1342.7142242998816,
+  "output": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\centralized\\20261014_102350_862385_seed42"
+}

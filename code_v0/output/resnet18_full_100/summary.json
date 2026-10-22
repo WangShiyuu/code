@@ -1,0 +1,154 @@
+{
+  "method": "resnet18_full",
+  "mode": "holdout",
+  "epochs": 100,
+  "dataset_samples": 27662,
+  "training_samples": 19365,
+  "source_subset_counts": {
+    "train": 19365,
+    "val": 4099,
+    "test": 4198
+  },
+  "training_subsets": [
+    "train"
+  ],
+  "all_valid_regions": 27662,
+  "processed_samples": 1936500,
+  "best_epoch": 47,
+  "wall_seconds": 1921.693342700135,
+  "output": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\resnet18_full_100",
+  "evaluation": "held-out test accuracy of the model selected by validation accuracy",
+  "best_val_accuracy": 0.8794828006830935,
+  "best_val_loss": 0.5691642229625681,
+  "test_accuracy": 0.8577894235350166,
+  "test_macro_f1": 0.753789678433232,
+  "test_details": {
+    "loss": 0.6469871374242019,
+    "accuracy": 0.8577894235350166,
+    "macro_f1": 0.753789678433232,
+    "samples": 4198,
+    "class_f1": [
+      0.29411764705882354,
+      0.7809278350515464,
+      0.9620826259196378,
+      0.8728813559322034,
+      0.8634097706879362,
+      0.8327586206896552,
+      0.9322916666666666,
+      0.4,
+      0.8456375838926175
+    ],
+    "class_support": [
+      27,
+      767,
+      884,
+      238,
+      506,
+      572,
+      386,
+      91,
+      727
+    ],
+    "confusion_matrix": [
+      [
+        5,
+        3,
+        5,
+        9,
+        1,
+        3,
+        0,
+        0,
+        1
+      ],
+      [
+        1,
+        606,
+        9,
+        5,
+        2,
+        11,
+        12,
+        17,
+        104
+      ],
+      [
+        0,
+        13,
+        850,
+        4,
+        5,
+        10,
+        1,
+        0,
+        1
+      ],
+      [
+        1,
+        9,
+        6,
+        206,
+        1,
+        6,
+        0,
+        7,
+        2
+      ],
+      [
+        0,
+        4,
+        3,
+        1,
+        433,
+        62,
+        1,
+        1,
+        1
+      ],
+      [
+        0,
+        17,
+        5,
+        4,
+        54,
+        483,
+        3,
+        1,
+        5
+      ],
+      [
+        0,
+        11,
+        1,
+        0,
+        1,
+        4,
+        358,
+        0,
+        11
+      ],
+      [
+        0,
+        43,
+        2,
+        4,
+        0,
+        3,
+        1,
+        30,
+        8
+      ],
+      [
+        0,
+        79,
+        2,
+        1,
+        0,
+        6,
+        6,
+        3,
+        630
+      ]
+    ]
+  }
+}

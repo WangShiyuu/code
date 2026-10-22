@@ -1,0 +1,236 @@
+{
+  "data": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\data_noniid_a0p3_7500_seed42\\data.json",
+  "rounds": 100,
+  "aggregation_period": 1,
+  "batch_size": 32,
+  "eval_batch_size": 64,
+  "image_size": 64,
+  "lr": 0.01,
+  "momentum": 0.9,
+  "weight_decay": 0.0005,
+  "scheduler": "cosine",
+  "seed": 42,
+  "bn": "batch",
+  "device": "auto",
+  "client_device": null,
+  "server_device": null,
+  "cpu_threads": 1,
+  "workers": 0,
+  "split": [
+    "P4"
+  ],
+  "checkpoint": null,
+  "backbone_only": false,
+  "output": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\noniid_a0p3_7500_seed42\\20261016_003955_748\\split_fixed_P4_K1",
+  "method": "split_fixed",
+  "dataset": "CBCL StreetScenes",
+  "classes": [
+    "bicycle",
+    "building",
+    "car",
+    "pedestrian",
+    "road",
+    "sidewalk",
+    "sky",
+    "store",
+    "tree"
+  ],
+  "client_sizes": [
+    1500,
+    1500,
+    1500,
+    1500,
+    1500
+  ],
+  "client_device_resolved": "cuda",
+  "server_device_resolved": "cuda",
+  "manifest_sha256": "2ce6872fa76ecbf563f609e96cbc2d267d09855d4af282f4fe27b56d3bddd09e",
+  "experiment_config": {
+    "source_path": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\experiment_config.py",
+    "source_code": "# 用途：集中配置训练、UAV、服务器和无线环境；修改下面 CONFIG 即可改变默认参数。\n# 检查/打印指令：python experiment_config.py\n# 带数据清单检查：python experiment_config.py --data output/data_load_7500/data.json\n# 训练示例：python centralized.py --rounds 100；显式命令行参数覆盖这里的训练默认值。\n# 注意：物理参数是可修改的仿真示例，不是实测设备数据，也不会对真实 CPU/GPU 限速。\n\"\"\"统一参数入口，仅使用 Python 标准库，因此检查配置不需要加载 PyTorch。\n\n训练使用 training/latency 的参数。频率、功率、信道等物理参数供独立资源模型使用；\n当前训练不会调用资源优化器，也不会因这些物理参数生成真实测量能耗。\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport copy\nimport json\nimport math\nfrom pathlib import Path\n\nCONFIG_PATH = Path(__file__).resolve()\nROOT = CONFIG_PATH.parent\n\n# ---------------------- 初学者主要修改这个字典 ----------------------\n# 单位直接写进键名：Hz 是每秒周期数或带宽，W 是功率，J 是能量，m 是米。\n# 每架 UAV 的样本数不在此处重填，实际负载由 data.json 的 clients 决定。\nCONFIG = {\n    'training': {\n        'data': str(ROOT / 'output/data_load_7500/data.json'),\n        'rounds': 100, 'batch_size': 32, 'eval_batch_size': 64, 'image_size': 64,\n        'lr': 0.01, 'momentum': 0.9, 'weight_decay': 0.0005,\n        'scheduler': 'cosine', 'bn': 'batch', 'seed': 42, 'aggregation_period': 1,\n        'device': 'auto', 'client_device': None, 'server_device': None,\n        'cpu_threads': 1, 'workers': 0,\n    },\n    # full 基线保留完整数据；其他训练统一使用上面的 7500 样本清单。\n    'full': {'data': str(ROOT / 'output/data_full/data.json'), 'mode': 'holdout'},\n    # 保留旧动态时延选择的 GFLOPS/Mbps 接口，不能把它们直接当作频率/带宽 Hz。\n    'latency': {'client_gflops': [2.0], 'server_gflops': 100.0, 'bandwidth_mbps': [20.0]},\n    'uavs': [\n        {\n            'position_m': list(position),\n            'f_min_hz': 2e8, 'f_max_hz': 1.5e9, 'f_ref_hz': 1e9,\n            'kappa': 1e-28, 'cycles_per_flop': 0.5,\n            'p_up_min_w': 0.01, 'p_up_max_w': 1.0, 'p_up_ref_w': 0.5,\n            'hover_power_w': 100.0,\n        }\n        for position in [(100, 0, 100), (0, 120, 100), (-140, 0, 100),\n                         (0, -160, 100), (180, 0, 100)]\n    ],\n    # 每个 UAV 有一个独立并行服务器分支；frequency_hz 是每分支能力，不是共享总能力。\n    'server': {\n        'position_m': [0, 0, 0], 'parallel_branches': 5, 'frequency_hz': 3e9,\n        'cycles_per_flop': 0.03, 'kappa': 1e-28, 'downlink_power_w': 2.0,\n        'aggregation_time_s': 0.01, 'aggregation_power_w': 10.0,\n    },\n    'radio': {'total_up_hz': 2e7, 'total_down_hz': 2e7, 'min_up_hz': 1e5, 'min_down_hz': 1e5},\n    'environment': {\n        'seed': 42, 'carrier_hz': 2.4e9, 'noise_psd_w_hz': 3.981e-21,\n        'los_a': 9.61, 'los_b': 0.16, 'los_loss_db': 1.0, 'nlos_loss_db': 20.0,\n        'rician_k': 10.0,  # 线性值，不是 dB；0 表示无直达分量。\n    },\n    'selection': {'candidates': [f'P{i}' for i in range(9)], 'initial_split': 'P4',\n                  'max_sweeps': 1, 'energy_tolerance_j': 1e-9},\n    # None 表示暂不限制。UAV 能量预算可以是一个共同值或按 UAV 顺序给出列表。\n    'budgets': {'round_time_s': None, 'round_uav_energy_j': None,\n                'mission_time_s': None, 'mission_uav_energy_j': None},\n}\n\n\ndef load_config():\n    \"\"\"每次返回独立副本；某次实验改参数不会修改模块内的默认 CONFIG。\"\"\"\n    return copy.deepcopy(CONFIG)\n\n\ndef _number(value, name, minimum=0, allow_equal=False):\n    if (isinstance(value, bool) or not isinstance(value, (int, float))\n            or not math.isfinite(value) or (value < minimum if allow_equal else value <= minimum)):\n        relation = '>=' if allow_equal else '>'\n        raise ValueError(f'{name} 必须是有限数，且 {relation} {minimum}')\n\n\ndef _integer(value, name, minimum=1):\n    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:\n        raise ValueError(f'{name} 必须是 >= {minimum} 的整数')\n\n\ndef _position(value, name):\n    if not isinstance(value, (list, tuple)) or len(value) != 3:\n        raise ValueError(f'{name} 必须是 [x,y,z] 三个以米为单位的坐标')\n    for number in value:\n        if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):\n            raise ValueError(f'{name} 的坐标必须是有限数')\n\n\ndef _validate(config):\n    # 边界检查不读取图片或清单；普通训练可用 1/3/5 等任意 UAV 数量的数据。\n    required = ('training', 'full', 'latency', 'uavs', 'server', 'radio',\n                'environment', 'selection', 'budgets')\n    if not isinstance(config, dict) or any(key not in config for key in required):\n        raise ValueError(f'配置需要包含 {required}')\n    for section in required:\n        if section != 'uavs' and not isinstance(config[section], dict):\n            raise ValueError(f'{section} 必须是字典')\n    training = config['training']\n    for key in ('rounds', 'batch_size', 'eval_batch_size', 'cpu_threads', 'aggregation_period'):\n        _integer(training[key], f'training.{key}')\n    _integer(training['image_size'], 'training.image_size', 32)\n    _integer(training['workers'], 'training.workers', 0)\n    _integer(training['seed'], 'training.seed', 0)\n    if training['seed'] >= 2**32:\n        raise ValueError('training.seed 必须小于 2**32，以兼容 NumPy 的随机种子')\n    _number(training['lr'], 'training.lr')\n    _number(training['momentum'], 'training.momentum', allow_equal=True)\n    if training['momentum'] >= 1:\n        raise ValueError('training.momentum 必须小于 1')\n    _number(training['weight_decay'], 'training.weight_decay', allow_equal=True)\n    if training['scheduler'] not in ('cosine', 'constant') or training['bn'] not in ('batch', 'frozen'):\n        raise ValueError('scheduler 只能是 cosine/constant，bn 只能是 batch/frozen')\n    for key in ('device', 'client_device', 'server_device'):\n        value = training[key]\n        if value is None and key != 'device':\n            continue\n        if not isinstance(value, str) or not value:\n            raise ValueError(f'training.{key} 需要设备字符串，例如 auto/cpu/cuda:0')\n    if any(not isinstance(section['data'], str) or not section['data']\n           for section in (training, config['full'])):\n        raise ValueError('training.data 和 full.data 需要非空文件路径')\n    if config['full']['mode'] not in ('holdout', 'all'):\n        raise ValueError('full.mode 只能是 holdout/all')\n    uavs = config['uavs']\n    if not isinstance(uavs, list) or not uavs or any(not isinstance(uav, dict) for uav in uavs):\n        raise ValueError('uavs 必须是非空的 UAV 参数字典列表')\n    for index, uav in enumerate(uavs):\n        _position(uav['position_m'], f'uavs[{index}].position_m')\n        for key in ('f_min_hz', 'f_max_hz', 'f_ref_hz', 'kappa', 'cycles_per_flop',\n                    'p_up_min_w', 'p_up_max_w', 'p_up_ref_w', 'hover_power_w'):\n            _number(uav[key], f'uavs[{index}].{key}')\n        if not uav['f_min_hz'] <= uav['f_ref_hz'] <= uav['f_max_hz']:\n            raise ValueError(f'UAV {index} 的参考频率必须位于最小/最大频率之间')\n        if not uav['p_up_min_w'] <= uav['p_up_ref_w'] <= uav['p_up_max_w']:\n            raise ValueError(f'UAV {index} 的参考发射功率必须位于最小/最大功率之间')\n    server = config['server']\n    _position(server['position_m'], 'server.position_m')\n    _integer(server['parallel_branches'], 'server.parallel_branches')\n    if server['parallel_branches'] < len(uavs):\n        raise ValueError('当前独立并行分支模型要求服务器分支数 >= UAV 数；不能重复使用共享总算力')\n    for key in ('frequency_hz', 'cycles_per_flop', 'kappa', 'downlink_power_w', 'aggregation_power_w'):\n        _number(server[key], f'server.{key}')\n    _number(server['aggregation_time_s'], 'server.aggregation_time_s', allow_equal=True)\n    if any(math.dist(uav['position_m'], server['position_m']) == 0 for uav in uavs):\n        raise ValueError('UAV 与服务器位置不能完全重合，否则路径损耗距离为零')\n    radio = config['radio']\n    for key in ('total_up_hz', 'total_down_hz', 'min_up_hz', 'min_down_hz'):\n        _number(radio[key], f'radio.{key}')\n    for direction in ('up', 'down'):\n        if len(uavs)*radio[f'min_{direction}_hz'] > radio[f'total_{direction}_hz']:\n            raise ValueError(f'{direction} 方向总带宽不能满足所有 UAV 的最小链路带宽')\n    env = config['environment']\n    _integer(env['seed'], 'environment.seed', 0)\n    if env['seed'] >= 2**32:\n        raise ValueError('environment.seed 必须小于 2**32')\n    for key in ('carrier_hz', 'noise_psd_w_hz', 'los_a', 'los_b'):\n        _number(env[key], f'environment.{key}')\n    for key in ('los_loss_db', 'nlos_loss_db', 'rician_k'):\n        _number(env[key], f'environment.{key}', allow_equal=True)\n    latency = config['latency']\n    _number(latency['server_gflops'], 'latency.server_gflops')\n    for key in ('client_gflops', 'bandwidth_mbps'):\n        values = latency[key]\n        if not isinstance(values, list) or len(values) not in (1, len(uavs)):\n            raise ValueError(f'latency.{key} 需要一个共同值或每架 UAV 一个值')\n        for value in values:\n            _number(value, f'latency.{key}')\n    selection = config['selection']\n    candidates = selection['candidates']\n    if (not isinstance(candidates, list) or not candidates or len(set(candidates)) != len(candidates)\n            or any(cut not in [f'P{i}' for i in range(9)] for cut in candidates)):\n        raise ValueError('selection.candidates 需要互不重复的 P0..P8 列表')\n    if selection['initial_split'] not in candidates:\n        raise ValueError('selection.initial_split 必须属于候选切点')\n    _integer(selection['max_sweeps'], 'selection.max_sweeps')\n    _number(selection['energy_tolerance_j'], 'selection.energy_tolerance_j', allow_equal=True)\n    for key in ('round_time_s', 'round_uav_energy_j', 'mission_time_s', 'mission_uav_energy_j'):\n        value = config['budgets'][key]\n        if value is None:\n            continue\n        if key.endswith('uav_energy_j') and isinstance(value, list):\n            if len(value) != len(uavs):\n                raise ValueError(f'budgets.{key} 列表长度必须等于 UAV 数')\n            for item in value:\n                _number(item, f'budgets.{key}')\n        else:\n            _number(value, f'budgets.{key}')\n\n\ndef validate_config(config):\n    \"\"\"无返回值；不合法配置立即报错，避免把单位错误或不可行上限带入物理模型。\"\"\"\n    try:\n        _validate(config)\n    except (KeyError, TypeError) as error:\n        raise ValueError(f'配置字段缺失或类型错误：{error}') from error\n\n\ndef validate_manifest_uavs(config, manifest):\n    \"\"\"独立物理实验检查 UAV 数量和完整负载；普通训练不受物理配置中 UAV 数限制。\"\"\"\n    validate_config(config)\n    if not isinstance(manifest, dict):\n        raise ValueError('数据清单必须是 JSON 对象')\n    clients = manifest.get('clients')\n    if not isinstance(clients, list) or len(clients) != len(config['uavs']):\n        raise ValueError(f'物理配置含 {len(config[\"uavs\"])} 架 UAV，需使用相同 UAV 数的数据清单')\n    settings = manifest.get('settings', {})\n    if not isinstance(settings, dict) or settings.get('uavs', len(clients)) != len(clients):\n        raise ValueError('数据清单 settings.uavs 与 clients 数量不一致')\n    indices = []\n    for index, client in enumerate(clients):\n        if not isinstance(client, dict):\n            raise ValueError(f'数据清单 UAV {index} 需要参数字典')\n        values = client.get('indices')\n        if not isinstance(values, list) or not values:\n            raise ValueError(f'数据清单 UAV {index} 的训练索引不能为空')\n        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values):\n            raise ValueError('UAV 训练索引必须是非负整数')\n        if 'samples' in client and client['samples'] != len(values):\n            raise ValueError(f'UAV {index} 的 samples 与 indices 不一致')\n        indices.extend(values)\n    if len(indices) != len(set(indices)):\n        raise ValueError('不同 UAV 不能持有重复的训练索引')\n    if 'samples' in manifest:\n        if (not isinstance(manifest['samples'], list)\n                or any(not isinstance(row, dict) or 'split' not in row for row in manifest['samples'])):\n            raise ValueError('数据清单 samples 必须是含 split 字段的样本字典列表')\n        train_count = sum(row['split'] == 'train' for row in manifest['samples'])\n        if sorted(indices) != list(range(train_count)):\n            raise ValueError('UAV 索引必须恰好覆盖清单中全部训练样本')\n\n\ndef training_defaults(method='centralized'):\n    \"\"\"提供 argparse 默认值；argparse 自动让显式 CLI 值优先，无需重写训练循环。\"\"\"\n    config = load_config()\n    validate_config(config)\n    defaults = copy.deepcopy(config['training'])\n    defaults.update(config['latency'])\n    defaults['candidates'] = config['selection']['candidates'][:]\n    defaults['split'] = [config['selection']['initial_split']]\n    if method == 'resnet18_full':\n        defaults.update(config['full'])\n        defaults['epochs'] = defaults['rounds']\n    return defaults\n\n\ndef configuration_snapshot(args, method):\n    \"\"\"同时保存可复查的配置源代码和 CLI 覆盖后的值；物理参数未接入真实训练。\"\"\"\n    config = load_config()\n    for key in config['training']:\n        if hasattr(args, key):\n            config['training'][key] = getattr(args, key)\n    if method == 'resnet18_full':\n        config['training']['rounds'] = args.epochs\n        config['full'].update(data=args.data, mode=args.mode)\n    for key in config['latency']:\n        if hasattr(args, key):\n            config['latency'][key] = copy.deepcopy(getattr(args, key))\n    if hasattr(args, 'candidates'):\n        config['selection']['candidates'] = args.candidates[:]\n    return dict(source_path=str(CONFIG_PATH), source_code=CONFIG_PATH.read_text(encoding='utf-8'),\n                resolved=config, physical_parameters_applied_to_training=False,\n                resource_optimization_applied=False, energy_measured=False,\n                scope='training/latency defaults applied; physical resource model is evaluated separately')\n\n\ndef main(argv=None):\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('--data', help='可选：检查现有 data.json 与物理配置的 UAV 数和负载；默认只检查配置')\n    args = parser.parse_args(argv)\n    try:\n        config = load_config()\n        validate_config(config)\n        if args.data:\n            path = Path(args.data).expanduser().resolve()\n            if path.is_dir():\n                path /= 'data.json'\n            manifest = json.loads(path.read_text(encoding='utf-8-sig'))\n            validate_manifest_uavs(config, manifest)\n            print(f'清单检查通过：{path}，UAV 样本数={[len(c[\"indices\"]) for c in manifest[\"clients\"]]}')\n        print('配置检查通过。以下物理数值为仿真示例，尚未用于真实训练资源分配或实测能耗。')\n        print(json.dumps(config, ensure_ascii=False, indent=2, allow_nan=False))\n        return config\n    except (ValueError, OSError) as error:\n        parser.error(str(error))\n\n\nif __name__ == '__main__':\n    main()\n",
+    "resolved": {
+      "training": {
+        "data": "output\\data_noniid_a0p3_7500_seed42\\data.json",
+        "rounds": 100,
+        "batch_size": 32,
+        "eval_batch_size": 64,
+        "image_size": 64,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "weight_decay": 0.0005,
+        "scheduler": "cosine",
+        "bn": "batch",
+        "seed": 42,
+        "aggregation_period": 1,
+        "device": "auto",
+        "client_device": null,
+        "server_device": null,
+        "cpu_threads": 1,
+        "workers": 0
+      },
+      "full": {
+        "data": "D:\\Wangshiyu\\Work1SFL\\0721-SplitFed-When-Federated-Learning-Meets-Split-Learning-main\\code\\output\\data_full\\data.json",
+        "mode": "holdout"
+      },
+      "latency": {
+        "client_gflops": [
+          2.0
+        ],
+        "server_gflops": 100.0,
+        "bandwidth_mbps": [
+          20.0
+        ]
+      },
+      "uavs": [
+        {
+          "position_m": [
+            100,
+            0,
+            100
+          ],
+          "f_min_hz": 200000000.0,
+          "f_max_hz": 1500000000.0,
+          "f_ref_hz": 1000000000.0,
+          "kappa": 1e-28,
+          "cycles_per_flop": 0.5,
+          "p_up_min_w": 0.01,
+          "p_up_max_w": 1.0,
+          "p_up_ref_w": 0.5,
+          "hover_power_w": 100.0
+        },
+        {
+          "position_m": [
+            0,
+            120,
+            100
+          ],
+          "f_min_hz": 200000000.0,
+          "f_max_hz": 1500000000.0,
+          "f_ref_hz": 1000000000.0,
+          "kappa": 1e-28,
+          "cycles_per_flop": 0.5,
+          "p_up_min_w": 0.01,
+          "p_up_max_w": 1.0,
+          "p_up_ref_w": 0.5,
+          "hover_power_w": 100.0
+        },
+        {
+          "position_m": [
+            -140,
+            0,
+            100
+          ],
+          "f_min_hz": 200000000.0,
+          "f_max_hz": 1500000000.0,
+          "f_ref_hz": 1000000000.0,
+          "kappa": 1e-28,
+          "cycles_per_flop": 0.5,
+          "p_up_min_w": 0.01,
+          "p_up_max_w": 1.0,
+          "p_up_ref_w": 0.5,
+          "hover_power_w": 100.0
+        },
+        {
+          "position_m": [
+            0,
+            -160,
+            100
+          ],
+          "f_min_hz": 200000000.0,
+          "f_max_hz": 1500000000.0,
+          "f_ref_hz": 1000000000.0,
+          "kappa": 1e-28,
+          "cycles_per_flop": 0.5,
+          "p_up_min_w": 0.01,
+          "p_up_max_w": 1.0,
+          "p_up_ref_w": 0.5,
+          "hover_power_w": 100.0
+        },
+        {
+          "position_m": [
+            180,
+            0,
+            100
+          ],
+          "f_min_hz": 200000000.0,
+          "f_max_hz": 1500000000.0,
+          "f_ref_hz": 1000000000.0,
+          "kappa": 1e-28,
+          "cycles_per_flop": 0.5,
+          "p_up_min_w": 0.01,
+          "p_up_max_w": 1.0,
+          "p_up_ref_w": 0.5,
+          "hover_power_w": 100.0
+        }
+      ],
+      "server": {
+        "position_m": [
+          0,
+          0,
+          0
+        ],
+        "parallel_branches": 5,
+        "frequency_hz": 3000000000.0,
+        "cycles_per_flop": 0.03,
+        "kappa": 1e-28,
+        "downlink_power_w": 2.0,
+        "aggregation_time_s": 0.01,
+        "aggregation_power_w": 10.0
+      },
+      "radio": {
+        "total_up_hz": 20000000.0,
+        "total_down_hz": 20000000.0,
+        "min_up_hz": 100000.0,
+        "min_down_hz": 100000.0
+      },
+      "environment": {
+        "seed": 42,
+        "carrier_hz": 2400000000.0,
+        "noise_psd_w_hz": 3.981e-21,
+        "los_a": 9.61,
+        "los_b": 0.16,
+        "los_loss_db": 1.0,
+        "nlos_loss_db": 20.0,
+        "rician_k": 10.0
+      },
+      "selection": {
+        "candidates": [
+          "P0",
+          "P1",
+          "P2",
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7",
+          "P8"
+        ],
+        "initial_split": "P4",
+        "max_sweeps": 1,
+        "energy_tolerance_j": 1e-09
+      },
+      "budgets": {
+        "round_time_s": null,
+        "round_uav_energy_j": null,
+        "mission_time_s": null,
+        "mission_uav_energy_j": null
+      }
+    },
+    "physical_parameters_applied_to_training": false,
+    "resource_optimization_applied": false,
+    "energy_measured": false,
+    "scope": "training/latency defaults applied; physical resource model is evaluated separately"
+  },
+  "torch": "2.11.0+cu126",
+  "optimizer": "SGD with momentum and weight decay",
+  "lr_scheduler": "CosineAnnealingLR",
+  "scheduler_step": "once after every global epoch",
+  "momentum_policy": "reset local momentum after each model aggregation/broadcast",
+  "bn_aggregation": "sample-weighted floating BN buffers; integer counters use maximum",
+  "shuffle_protocol": "seed + epoch_index*100003 + uav_id*997; full permutation",
+  "early_stopping": false,
+  "energy_measured": false,
+  "round_definition": "1 SL round = 1 complete shuffled local epoch, drop_last=False",
+  "split_semantics": "independent UAV prefix and per-UAV server suffix; full-model weighted aggregation",
+  "test_selection": "maximum validation accuracy; minimum validation loss on ties; test selected model(s) once after all training"
+}
