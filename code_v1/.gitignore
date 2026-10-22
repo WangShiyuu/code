@@ -4,5 +4,9 @@ __pycache__/
 *.py[cod]
 # 本机 Python 独立运行环境，各电脑根据依赖自行安装，不提交 Git。
 .venv/
-# 数据图片缓存、采集清单和环境文件可由统一入口生成，保留本地使用。
-output/
+# 可复用的数据缓存和共享环境准备目录留在本机；避免不同机器的绝对路径
+# 和 PNG 缓存相互覆盖。每次训练的 output/output_时间戳/ 结果允许 Git。
+output/data/
+output/scenario/
+# 用户自定义的数据准备目录也不提交裁剪图片。
+output/**/crops/

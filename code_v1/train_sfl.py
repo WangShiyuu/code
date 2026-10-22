@@ -19,8 +19,9 @@
 比较算法放在其他代码中。统一模型的初始下发视为起飞前已完成，不计入此次
 统计；最后聚合模型留在服务器，不再下发用于下一周期的前缀。
 
-默认仅写 output/diagnostic/summary.json，包含配置、画像、epoch 记录和量级
-统计。--save-checkpoint 可另存最终聚合模型。电脑墙钟耗时、模拟时延和模型
+每次自动新建 output/output_本地时间戳/，保存 summary.json、report.md、
+key_metrics.csv 和环境输入副本。--output 指定父目录，仍会在其下新建本次
+output_时间戳目录；--save-checkpoint 可另存最终聚合模型。电脑墙钟耗时、模拟时延和模型
 估计能耗分开报告；不能据此宣称 UAV 实测能耗或达到理论收敛条件。
 """
 from __future__ import annotations
@@ -33,6 +34,7 @@ import math
 import os
 from pathlib import Path
 import random
+import shutil
 import time
 
 import torch
@@ -42,6 +44,7 @@ from torch.utils.data import DataLoader, Subset
 from config import ROOT, load_config, resolve_collection
 from data import AcquisitionSnapshots, CBCLDataset, validate_manifest
 from environment import EnvironmentTrace
+from report_results import write_run_report
 from sfl_model import SPLIT_POINTS, equal_fedavg, make_common_models, profile_splits
 from transmission import TraceHorizonError, transmit
 
@@ -60,8 +63,8 @@ def parse_args(argv=None):
     parser.add_argument("--config", type=Path, help="可选 JSON 局部配置，规则与场景入口一致")
     parser.add_argument("--scenario", type=Path, help="含 environment.csv/scenario.json 的目录")
     parser.add_argument("--manifest", type=Path, help="真实 data.json；默认读取配置中的数据输出目录")
-    parser.add_argument("--output", type=Path, default=ROOT / "output" / "diagnostic",
-                        help="报告目录；已存在的报告不覆盖，请另指定目录")
+    parser.add_argument("--output", type=Path, default=ROOT / "output",
+                        help="输出父目录；每次自动新建 output_时间戳 子目录，保留历次运行")
     parser.add_argument("--epochs", type=_positive_int, help="本次 epoch 数，默认一个聚合周期，须为聚合间隔的倍数")
     parser.add_argument("--split", choices=SPLIT_POINTS, help="本次固定切点，默认配置 initial_split")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), help="本机执行设备，默认读取配置")
@@ -71,6 +74,48 @@ def parse_args(argv=None):
                         help="固定验证子集大小，上限为完整验证集大小；不读取测试集")
     parser.add_argument("--save-checkpoint", action="store_true", help="另存最终聚合模型 checkpoint.pt")
     return parser.parse_args(argv)
+
+
+def create_run_directory(parent):
+    """在输出父目录下原子创建独立运行目录，不覆盖同名文件或已有实验。
+
+    时间戳使用运行机器的本地时间并精确到微秒；极少数重名时附加序号。
+    mkdir(exist_ok=False) 使同一时刻启动的两个进程也不会共用结果目录。
+    """
+    parent = Path(parent).expanduser().resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
+    for suffix in range(10000):
+        name = f"output_{stamp}" + (f"_{suffix:02d}" if suffix else "")
+        candidate = parent / name
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+    raise FileExistsError("无法分配唯一运行目录，请检查输出父目录")
+
+
+def archive_environment(trace, scenario_dir, output):
+    """归档本次实际使用的环境文件，不复制可复用的图片缓存。
+
+    每份结果携带其 CSV、参数快照及轨迹图，Git 同步时可核对本次外部输入。
+    数据清单仍由 summary 中的 SHA256 和指纹绑定。复制后再次核对 CSV，
+    防止读取之后源文件被其他进程修改，导致归档与执行过程不一致。
+    """
+    folder = output / "environment"
+    folder.mkdir()
+    for name in ("environment.csv", "scenario.json", "patrol_map.svg"):
+        source = scenario_dir / name
+        if name == "patrol_map.svg" and not source.exists():
+            continue
+        shutil.copy2(source, folder / name)
+    expected = trace.scenario["trace"]["csv_sha256"]
+    if hashlib.sha256((folder / "environment.csv").read_bytes()).hexdigest() != expected:
+        raise ValueError("归档 CSV 与本次加载的环境不一致，源文件可能在运行时被修改")
+    if json.loads((folder / "scenario.json").read_text(encoding="utf-8-sig")) != trace.scenario:
+        raise ValueError("归档场景参数与本次加载的环境不一致")
+    return folder
 
 
 def load_inputs(config, scenario_dir, manifest_path):
@@ -205,6 +250,10 @@ class PhysicalExecution:
                                      "cross_boundary_transmissions": 0}
                               for name in ("activations_and_labels_up", "gradients_down",
                                            "prefix_state_up", "prefix_state_down")}
+        # 只沿每个并行块的最慢分支累计，四项之和等于模拟总时长；各机
+        # 累计工作时间另外保留，不能将 N 条并行链路时长相加当作完成时间。
+        self.critical_path = dict(uav_compute_s=0.0, server_compute_s=0.0,
+                                  communication_s=0.0, aggregation_s=0.0)
         self.blocks = 0
 
     def _require_coverage(self, time_s):
@@ -235,7 +284,7 @@ class PhysicalExecution:
 
     def batch(self, results):
         """并行模拟各机同一个批次，再把共同时间推进到最晚完成时刻。"""
-        start, ends = self.time_s, []
+        start, ends, components = self.time_s, [], []
         uav_cfg, server_cfg, profile = self.config["uav"], self.config["server"], self.profile
         for uav, result in enumerate(results):
             count = result["samples"]
@@ -248,13 +297,21 @@ class PhysicalExecution:
                 (client_forward_cycles + client_backward_cycles) * uav_cfg["f_ref_hz"] ** 2)
             self.server["compute_j"] += server_cfg["kappa"] * server_cycles * server_cfg["frequency_hz"] ** 2
             t = start + client_forward_cycles / uav_cfg["f_ref_hz"]
+            upload_start = t
             t = self._transfer(uav, result["activation_bytes"] + result["label_bytes"], t,
                                down=False, category="activations_and_labels_up")
+            upload_s = t - upload_start
             t += server_cycles / server_cfg["frequency_hz"]
+            download_start = t
             t = self._transfer(uav, result["gradient_bytes"], t, down=True, category="gradients_down")
             ends.append(t + client_backward_cycles / uav_cfg["f_ref_hz"])
+            components.append((client_s, server_cycles / server_cfg["frequency_hz"],
+                               upload_s + t - download_start))
         self.time_s = max(ends)
         self._require_coverage(self.time_s)
+        slowest = max(range(self.n), key=ends.__getitem__)
+        for key, value in zip(("uav_compute_s", "server_compute_s", "communication_s"), components[slowest]):
+            self.critical_path[key] += value
         for uav, end in enumerate(ends):
             self.uavs[uav]["barrier_wait_s"] += self.time_s - end
         self.blocks += 1
@@ -262,21 +319,26 @@ class PhysicalExecution:
     def aggregate(self, *, final):
         """先并行上传前缀，再聚合；仅非最终周期下发聚合后的新前缀。"""
         size = self.profile["prefix_state_bytes"]
+        start = self.time_s
         ends = [self._transfer(uav, size, self.time_s, down=False, category="prefix_state_up")
                 for uav in range(self.n)]
         upload_end = max(ends)
+        self.critical_path["communication_s"] += upload_end - start
         for uav, end in enumerate(ends):
             self.uavs[uav]["barrier_wait_s"] += upload_end - end
         aggregation_s = self.config["server"]["aggregation_time_s"]
+        self.critical_path["aggregation_s"] += aggregation_s
         self.time_s = upload_end + aggregation_s
         self.server["aggregation_j"] += aggregation_s * self.config["server"]["aggregation_power_w"]
         for ledger in self.uavs:
             ledger["barrier_wait_s"] += aggregation_s
         self._require_coverage(self.time_s)
         if not final:
+            start = self.time_s
             ends = [self._transfer(uav, size, self.time_s, down=True, category="prefix_state_down")
                     for uav in range(self.n)]
             self.time_s = max(ends)
+            self.critical_path["communication_s"] += self.time_s - start
             for uav, end in enumerate(ends):
                 self.uavs[uav]["barrier_wait_s"] += self.time_s - end
 
@@ -284,6 +346,7 @@ class PhysicalExecution:
         """返回能耗组成，不将未知固定飞行/电池/接收参数解释为零。"""
         return {
             "simulated_elapsed_s": self.time_s, "training_blocks": self.blocks,
+            "critical_path": dict(self.critical_path),
             "uavs": [dict(uav_id=uav, **ledger,
                           modeled_training_j=ledger["compute_j"] + ledger["transmit_j"])
                      for uav, ledger in enumerate(self.uavs)],
@@ -297,17 +360,34 @@ class PhysicalExecution:
         }
 
 
+def cost_snapshot(physical):
+    """取得独立累计成本快照，供 epoch 末计算增量，避免字典引用随训练变化。"""
+    return dict(critical_path=dict(physical.critical_path),
+                uav_compute_j=math.fsum(ledger["compute_j"] for ledger in physical.uavs),
+                uav_transmit_j=math.fsum(ledger["transmit_j"] for ledger in physical.uavs),
+                server_compute_j=physical.server["compute_j"],
+                server_transmit_j=physical.server["transmit_j"],
+                aggregation_j=physical.server["aggregation_j"])
+
+
+def epoch_costs(before, physical):
+    """返回本 epoch 的时延及系统能耗增量，包含适用的聚合块。"""
+    after = cost_snapshot(physical)
+    result = {key: after[key] - before[key] for key in after if key != "critical_path"}
+    result["modeled_system_training_j"] = math.fsum(result.values())
+    result["critical_path"] = {key: after["critical_path"][key] - value
+                               for key, value in before["critical_path"].items()}
+    return result
+
+
 def run_diagnostic(args):
-    """准备输入并完成有限个完整聚合周期；返回结果，唯一报告由 main 写出。"""
+    """准备输入并完成有限个完整聚合周期；报告与表格由 main 写入本次目录。"""
     wall_start = time.perf_counter()
     config = load_config(args.config)
     period = config["training"]["aggregation_period"]
     epochs = period if args.epochs is None else args.epochs
     if epochs % period:
         raise ValueError(f"--epochs 必须为 aggregation_period={period} 的整数倍，以完整聚合结束")
-    output = args.output.expanduser().resolve()
-    if (output / "summary.json").exists() or (output / "checkpoint.pt").exists():
-        raise FileExistsError(f"不覆盖已有诊断结果，请指定新的 --output：{output}")
     scenario_dir = (args.scenario or Path(config["output"]["scenario_dir"])).expanduser().resolve()
     manifest_path = (args.manifest or Path(config["data"]["output"]) / "data.json").expanduser().resolve()
     trace, manifest, train, validation, snapshots = load_inputs(config, scenario_dir, manifest_path)
@@ -318,6 +398,9 @@ def run_diagnostic(args):
     if device_name == "cuda" and not torch.cuda.is_available():
         raise ValueError("当前 PyTorch 或设备不支持 CUDA；可改用 --device cpu")
     device = torch.device(device_name)
+    output = create_run_directory(args.output)
+    environment_archive = archive_environment(trace, scenario_dir, output)
+    print(f"Output: {output}", flush=True)
     seed = config["training"]["initialization_seed"]
     torch.manual_seed(seed)
     if device.type == "cuda":
@@ -351,6 +434,7 @@ def run_diagnostic(args):
     last_snapshots = None
     for epoch in range(1, epochs + 1):
         start_s = physical.time_s
+        costs_before = cost_snapshot(physical)
         current = snapshots.snapshot_indices(start_s)
         last_snapshots = current
         counts = [len(indices) for indices in current]
@@ -404,6 +488,7 @@ def run_diagnostic(args):
             aggregations.append(dict(after_epoch=epoch, start_s=aggregation_start,
                                      end_s=physical.time_s, validation=metrics))
         record["end_with_aggregation_s"] = physical.time_s
+        record["costs"] = epoch_costs(costs_before, physical)
         epoch_records.append(record)
     _sync(device)
     train_wall_s = time.perf_counter() - train_wall_start
@@ -414,6 +499,10 @@ def run_diagnostic(args):
     report = {
         "schema_version": 1, "kind": "fixed_split_reference_resource_training_diagnostic",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "outputs": dict(run_dir=str(output), environment_dir=str(environment_archive),
+                        summary_json=str(output / "summary.json"), report_md=str(output / "report.md"),
+                        key_metrics_csv=str(output / "key_metrics.csv"),
+                        checkpoint=str(output / "checkpoint.pt") if args.save_checkpoint else None),
         "config": config,
         "run": dict(epochs=epochs, aggregation_period=period, aggregations=len(aggregations),
                     split=cut, device=str(device), torch_version=torch.__version__, threads=args.threads,
@@ -443,7 +532,6 @@ def run_diagnostic(args):
                            "模拟物理时延不含本机加载图片、画像和评价耗时；CSV 覆盖不足为输入数据问题",
                            "晚到且尚未进入 epoch 快照的样本不补训，不要求逐图训练次数"],
     }
-    output.mkdir(parents=True, exist_ok=True)
     if args.save_checkpoint:
         torch.save({"model_state_dict": {name: value.detach().cpu() for name, value in models[0].state_dict().items()},
                     "epochs": epochs, "split": cut, "data_fingerprint": manifest["fingerprint"]}, output / "checkpoint.pt")
@@ -451,19 +539,23 @@ def run_diagnostic(args):
 
 
 def main(argv=None):
-    """运行诊断并保存唯一 JSON 报告；异常明确失败，不输出伪造的完成结果。"""
+    """运行诊断，将 JSON、关键指标表和中文报告写入本次独立结果目录。"""
     args = parse_args(argv)
     try:
         report = run_diagnostic(args)
     except TraceHorizonError as error:
         raise SystemExit(f"诊断未完成：{error} 这表示 CSV 覆盖不足，不是违反训练时延约束。") from error
-    path = args.output.expanduser().resolve() / "summary.json"
+    output = Path(report["outputs"]["run_dir"])
+    path = output / "summary.json"
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    tables = write_run_report(report, output)
     physical = report["physical_execution"]
     print(f"Completed. Simulated={physical['simulated_elapsed_s']:.3f}s; "
           f"modeled training energy={physical['modeled_system_training_j']:.3f}J; "
           f"parameter change L2={report['parameter_change_l2']:.6g}", flush=True)
     print(f"Report: {path}", flush=True)
+    print(f"Key metrics: {tables['key_metrics_csv']}", flush=True)
+    print(f"Readable report: {tables['report_md']}", flush=True)
 
 
 if __name__ == "__main__":

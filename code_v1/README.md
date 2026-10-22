@@ -10,8 +10,9 @@
 2. **运行 `prepare_scenario.py`**：统一准备数据、分配采集顺序，并生成轨迹和信道环境。
 3. **运行 `example_read.py`**：查看任意时刻的位置、当前信道及可用样本数量，确认读取符合预期。
 4. **运行 `train_sfl.py`**：先用固定切分及参考资源完成短训练诊断，观察损失、计算量、通信量、模拟时延和估计能耗。
+5. **查看本次 `output/output_时间戳/report.md`**：集中查看切分点、样本数、计算与通信开销、带宽和功率；也可使用 `key_metrics.csv`。
 
-`data.py` 和 `environment.py` 是由统一入口调用的具体功能模块，一般不需要逐个运行；其中 `environment.py` 没有独立命令行入口，直接运行该文件不会生成环境。`sfl_model.py` 提供模型与画像，`transmission.py` 执行分段通信，`train_sfl.py` 串联真实训练和模拟时钟。目前未接入切分点优化、资源分配优化和比较算法，比较方案后续放在单独代码中。
+`data.py` 和 `environment.py` 是由统一入口调用的具体功能模块，一般不需要逐个运行；其中 `environment.py` 没有独立命令行入口，直接运行该文件不会生成环境。`sfl_model.py` 提供模型与画像，`transmission.py` 执行分段通信，`train_sfl.py` 串联真实训练和模拟时钟，`report_results.py` 汇总运行记录。目前未接入切分点优化、资源分配优化和比较算法，比较方案后续放在单独代码中。
 
 各Python文件开头均说明用途、输入输出和运行指令，函数内注释解释关键步骤与单位。
 
@@ -39,6 +40,24 @@ output/
    ├─ scenario.json           参数、容量、航点和文件校验值
    └─ patrol_map.svg          工作范围和巡逻轨迹图
 ```
+
+每次训练在同一 `output` 下自动创建一个新目录，不覆盖先前运行：
+
+```text
+output/
+├─ data/                     可复用图片缓存与清单，留在本机
+├─ scenario/                 可复用的共享环境输入，留在本机
+├─ output_20261022_143000_123456/
+│  ├─ summary.json           完整配置、训练与计量记录
+│  ├─ report.md              中文关键指标表
+│  ├─ key_metrics.csv        可用Excel读取的指标表
+│  ├─ checkpoint.pt          仅指定 --save-checkpoint 时生成
+│  └─ environment/           本次CSV、场景参数和轨迹图的归档副本
+└─ output_20261022_150000_654321/
+   └─ ...
+```
+
+时间戳以运行机器的本地时间生成，精确到微秒，重名时附加序号。每次训练目录内的报告、参数、环境副本及可选模型均允许Git提交；图片缓存、默认共享 `output/data/` 和 `output/scenario/` 仍忽略，避免在各电脑之间相互覆盖可复用输入。脚本只生成文件，使用VS Code源代码管理提交、同步结果。已有旧版 `output/diagnostic/` 不自动移动或删除。
 
 同参数且完整的缓存可复用；已有目录中参数不一致、文件缺失或内容不一致时会报错，不覆盖旧实验。改变无人机数量、样本容量或环境参数时，请使用新的输出目录。
 
@@ -166,7 +185,7 @@ count = env.sample_count_at(12.345)
 
 ## 7. 在另一台机器运行首次训练
 
-在 VS Code 中拉取仓库，打开 `code_v1` 目录的终端。先把原始 CBCL 数据放到默认位置，或修改 `config.py` 的 `data.root`。数据缓存和环境CSV不上传Git，另一台机器需自行生成。
+在 VS Code 中拉取仓库，打开 `code_v1` 目录的终端。先把原始 CBCL 数据放到默认位置，或修改 `config.py` 的 `data.root`。另一台机器首次训练需准备本地图片缓存和对应环境；每次训练结果内会保留环境副本，允许随结果一起上传Git。
 
 ```powershell
 cd E:\Work1SFL\code\code_v1
@@ -189,7 +208,7 @@ python -m venv .venv
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 -B train_sfl.py --device cuda --epochs 2
-.\.venv\Scripts\python.exe -X utf8 -B train_sfl.py --epochs 4 --output output/diagnostic_4ep --save-checkpoint
+.\.venv\Scripts\python.exe -X utf8 -B train_sfl.py --epochs 4 --save-checkpoint
 ```
 
 `--epochs` 必须是聚合间隔的正整数倍，默认值为一个聚合周期（当前2个epoch），与 `training.total_epochs=100` 的正式理论预算分开。所有无人机完整遍历每个epoch冻结的数据，不截取几个batch冒充完整epoch。默认初始化种子42、固定P4、参考机载频率1GHz、上行功率0.5W、每机上/下行各4MHz，具体读取配置，未执行资源优化。
@@ -202,15 +221,25 @@ python -m venv .venv
 
 初始化模型的首个前缀视为起飞前已统一下发。每次聚合只上传各机前缀状态（包括BN buffers），服务器持有独立后缀，拼接后对完整模型等权聚合。非末次聚合再下发前缀；末次以服务器得到最终完整模型为终点。等待不改变巡逻轨迹，不增加悬停能耗。
 
-默认只保存一份有用的运行记录 `output/diagnostic/summary.json`：
+每次运行自动创建 `output/output_时间戳/`，其中 `summary.json` 保存完整运行记录：
 
 - `split_profiles`：P0—P8四段前后向FLOPs、每样本激活/梯度/标签字节、前缀状态字节。
 - `epoch_records` / `aggregation_records`：各epoch快照样本数、尾批、损失、准确率、物理时间和聚合记录。
 - `validation_before` / `validation_after`：同一固定验证子集（默认256张）的训练前后表现；测试集未参与。
-- `physical_execution`：模拟时延、各机计算/发射能量、服务器能量、通信载荷及跨CSI节点次数。
+- `physical_execution`：模拟时延、各机计算/发射能量、服务器能量、通信载荷及跨CSI节点次数。`critical_path` 将总模拟时延分成无人机计算、服务器计算、通信、聚合四项，沿每个并行块的最慢分支累计，四项之和为总时长。
 - `wall_timing`：本机墙钟耗时，与模拟时延分开；`parameter_change_l2` 检查模型实际发生更新。
 - `config` / `inputs` / `run`：完整参数、数据与CSV指纹、设备和协议；不会把未知电量填为零。
 
-已有 `summary.json` 不覆盖，重复运行可指定新的 `--output`。仅添加 `--save-checkpoint` 才保存 `checkpoint.pt`；该文件可作为以后统一初始化的 `initialization_checkpoint`，当前不提供恢复中断训练的功能。
+`report.md` 和 `key_metrics.csv` 自动汇总epoch、切分点、各轮样本数、各机带宽、计算频率/功率、上传功率、计算/通信时延及能耗。频率单位为Hz；计算动态功率根据 `kappa * f^3` 得到，不能把1GHz当作1W。每机上/下行累计工作时间是该链路的工作量，不将5条并行链路的时长相加作为系统完成时间。`barrier_wait_s` 只记录批末和聚合同步等待。
+
+重复执行同一训练命令会自动生成新的时间戳目录，无需手动改名。`--output` 指定**父目录**，例如 `--output output/my_experiment` 会写到 `output/my_experiment/output_时间戳/`。仅添加 `--save-checkpoint` 才保存 `checkpoint.pt`；该文件可作为以后统一初始化的 `initialization_checkpoint`，当前不提供恢复中断训练的功能。
+
+已经完成的旧版训练也可以生成关键指标表，无需重训：
+
+```powershell
+python -X utf8 -B report_results.py --report output/diagnostic/summary.json
+```
+
+不带 `--report` 时优先汇总默认 `output` 下最新时间戳目录中的 `summary.json`，没有新目录时回退到旧版路径。旧记录缺少新增的关键路径分项时，表格显示未记录；原有每机计算、上传、下行及能耗统计仍可读取。
 
 FLOPs来自计数器支持的算子，不能覆盖所有内存与算子开销。模拟时间由配置的cycles/FLOP和频率得到；估计能耗由有效电容及发射功率得到，均不是另一台机器或真实UAV的测量值。短诊断只用于观察参数和执行流程，不证明100epoch收敛、任务可行或优化算法优于其他方法。训练出现非有限损失/梯度会明确终止，应据诊断调整步长，不自动加入裁剪或其他未定义的优化器。
