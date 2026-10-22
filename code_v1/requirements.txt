@@ -4,4 +4,4 @@
 # 环境生成和CSV回放只使用Python标准库，不需要安装这两个包。
 numpy>=1.24
 Pillow>=10.0
-# 本次不运行训练。后续调用CBCLDataset读取张量时，另安装适配设备的PyTorch。
+# 运行 train_sfl.py 时改用 requirements-training.txt，并安装适配设备的PyTorch。

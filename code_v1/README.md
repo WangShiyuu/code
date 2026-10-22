@@ -1,6 +1,6 @@
-# 连续飞行 UAV-SFL：数据准备与环境回放
+# 连续飞行 UAV-SFL：数据、环境与训练诊断
 
-本目录统一管理 CBCL StreetScenes 数据划分、样本采集顺序、固定巡逻轨迹及动态信道。所有可修改参数集中在 `config.py`。
+本目录统一管理 CBCL StreetScenes 数据划分、样本采集顺序、固定巡逻轨迹、动态信道及首次 SFL 训练诊断。系统参数集中在 `config.py`；本次诊断规模及本机设备可通过训练命令行指定。
 
 同级 `code_v0` 为原代码的完整复制归档，原路径没有改动。
 
@@ -9,12 +9,13 @@
 1. **修改 `config.py`**：设定无人机数量、样本量、工作范围、飞行速度和信道参数等。
 2. **运行 `prepare_scenario.py`**：统一准备数据、分配采集顺序，并生成轨迹和信道环境。
 3. **运行 `example_read.py`**：查看任意时刻的位置、当前信道及可用样本数量，确认读取符合预期。
+4. **运行 `train_sfl.py`**：先用固定切分及参考资源完成短训练诊断，观察损失、计算量、通信量、模拟时延和估计能耗。
 
-当前这些文件负责训练前的准备和环境读取，还没有执行神经网络训练、切分点优化或资源分配优化。`data.py` 和 `environment.py` 是由统一入口调用的具体功能模块，一般不需要逐个运行；其中 `environment.py` 没有独立命令行入口，直接运行该文件不会生成环境。
+`data.py` 和 `environment.py` 是由统一入口调用的具体功能模块，一般不需要逐个运行；其中 `environment.py` 没有独立命令行入口，直接运行该文件不会生成环境。`sfl_model.py` 提供模型与画像，`transmission.py` 执行分段通信，`train_sfl.py` 串联真实训练和模拟时钟。目前未接入切分点优化、资源分配优化和比较算法，比较方案后续放在单独代码中。
 
 各Python文件开头均说明用途、输入输出和运行指令，函数内注释解释关键步骤与单位。
 
-使用 Python 3.10 及以上版本。准备图片需要 NumPy、Pillow；环境生成和 CSV 回放仅依赖标准库。只有后续调用数据集读取 PyTorch 张量时才需要安装 PyTorch。
+使用 Python 3.10 及以上版本。准备图片需要 NumPy、Pillow；环境生成和 CSV 回放仅依赖标准库。运行真实训练与模型画像时，另安装 `requirements-training.txt` 中的 PyTorch 依赖。首次训练的完整步骤见第7节。
 
 ```powershell
 cd E:\Work1SFL\code\code_v1
@@ -79,7 +80,7 @@ python -X utf8 -B prepare_scenario.py --stage environment --manifest output/data
 
 `energy` 的尚未校准项为 `None`，不影响轨迹和信道生成。调用 `config.training_energy_capacity(config)` 核算训练可用电量前必须填全，计算为：初始电量减固定飞行能耗、固定运行能量和安全储备。不能把旧版悬停功率直接作为固定飞行能耗。
 
-默认训练参数为100个本地epoch、每2个epoch聚合、epoch累计步长0.18、普通SGD和固定BN。批次实际步长为 `epoch_step_size * batch_samples / epoch_snapshot_samples`。`theory_budget()` 可复算正文的条件性100 epoch预算，但不证明给定参数界适用于实际网络。初始化权重和切分画像路径可单独填写；本版不下载权重、不执行profiling或训练。
+默认训练协议参数为100个本地epoch、每2个epoch聚合、epoch累计步长0.18、普通SGD和固定BN。批次实际步长为 `epoch_step_size * batch_samples / epoch_snapshot_samples`。`theory_budget()` 可复算正文的条件性100 epoch预算，但不证明给定参数界适用于实际网络。首次诊断不调用该预算，默认只完成一个聚合周期；通过模型副本自动统计画像，不要求预先填写 `split_profile_path`，也不下载预训练权重。
 
 ## 3. CBCL 数据划分与持续采集
 
@@ -154,11 +155,62 @@ count = env.sample_count_at(12.345)
 - CSI只取不晚于查询时刻的最近观测，不插值未来CSI。重复或乱序查询不改变结果。
 - `channel_time_s` 是CSI观测时间，`distance_m`/`channel_distance_m` 是该观测的距离；`current_distance_m` 是查询时刻的实际位置距离。
 - `window_mean` 对截至当前时刻最近W个CSV观测取算术均值，不是W秒窗口；不足W个时使用已有观测。
-- `next_change_time_s` 表示下一信道更新边界，任务终点为 `None`。传输跨边界时，应分段累计可传输量，不将一次CSI用于整个长epoch。
+- `next_change_time_s` 表示下一信道更新边界，任务终点为 `None`。`transmission.transmit()` 在节点之间保持CSI，跨边界逐段累计传输比特，不将一次CSI用于整个长epoch。
 - 越界时间、缺失UAV、重复行、非有限数和非正增益会报错，不静默外推。
 
-后续训练需共用 `sim_time_s`：epoch开始时冻结样本前缀，批次资源依据当前CSI选择，按计算、传输及同步模型的执行时间推进时钟；较快分支等待时继续飞行采集。电脑实际运行耗时、图片加载和评价耗时不作为飞行模拟时间，也不需要 `sleep`。
+`train_sfl.py` 共用物理模拟时间：epoch开始时冻结样本前缀，按计算、传输及同步模型的执行时间推进时钟；较快分支等待时继续飞行采集。本次资源使用固定参考值；后续资源决策只可使用决策时的当前或历史CSI。电脑实际运行耗时、图片加载和评价耗时不作为飞行模拟时间，也不需要 `sleep`。
 
 环境预生成便于公平比较：不同策略按自身模拟时刻读取同一外部过程。其完成时间和实际纳入训练的样本量可以不同，需要共同报告；不能仅凭环境生成成功就宣称100 epoch已满足时限、电量或测试精度要求。
 
 正式目录不保留临时测试脚本、测试数据或测试报告。`output/data` 是后续使用的真实数据缓存，`output/scenario` 是实际环境输入。
+
+## 7. 在另一台机器运行首次训练
+
+在 VS Code 中拉取仓库，打开 `code_v1` 目录的终端。先把原始 CBCL 数据放到默认位置，或修改 `config.py` 的 `data.root`。数据缓存和环境CSV不上传Git，另一台机器需自行生成。
+
+```powershell
+cd E:\Work1SFL\code\code_v1
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-training.txt
+.\.venv\Scripts\python.exe -X utf8 -B prepare_scenario.py --stage all
+.\.venv\Scripts\python.exe -X utf8 -B train_sfl.py
+```
+
+目录放在其他位置时修改第一行路径；后续命令均在 `code_v1` 内执行。不需要激活虚拟环境，也不需要修改 PowerShell 执行策略。VS Code 选择 `.venv/Scripts/python.exe` 解释器后，也可使用对应的 Python 运行按钮。
+
+有 NVIDIA GPU 时，先根据 [PyTorch 官方安装页面](https://pytorch.org/get-started/locally/) 为该虚拟环境安装匹配的 CUDA 版 PyTorch。CPU 版可明确安装为：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+.\.venv\Scripts\python.exe -m pip install -r requirements-training.txt
+```
+
+默认 `device=auto`：可用CUDA时使用GPU，否则使用CPU；CPU也能完成诊断。显式指定GPU或改变诊断规模：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -B train_sfl.py --device cuda --epochs 2
+.\.venv\Scripts\python.exe -X utf8 -B train_sfl.py --epochs 4 --output output/diagnostic_4ep --save-checkpoint
+```
+
+`--epochs` 必须是聚合间隔的正整数倍，默认值为一个聚合周期（当前2个epoch），与 `training.total_epochs=100` 的正式理论预算分开。所有无人机完整遍历每个epoch冻结的数据，不截取几个batch冒充完整epoch。默认初始化种子42、固定P4、参考机载频率1GHz、上行功率0.5W、每机上/下行各4MHz，具体读取配置，未执行资源优化。
+
+不用填电池或固定飞行能量，不调用电量可行性检查，不施加正式epoch预算或任务截止时间。环境文件仍必须覆盖执行所需的物理时间；超过CSV终点将明确报覆盖不足，不冻结末行信道。需要更长环境时，增加 `mission.duration_s` 后另生成环境，并将原采集速率显式写入 `data.sample_rate_per_s`，以免默认自动速率随时长改变。更多epoch不保证现有600s环境仍够用。
+
+每个训练批次按以下顺序执行：各机前缀前向 → 激活与标签上传 → 对应服务器分支后缀前后向 → 边界梯度下传 → 前缀反向及统一步长SGD更新。服务器分支在模拟中并行、批末同步；本机为节约显存依次执行各独立模型的算子，实际执行顺序不作为模拟排队时延。每个epoch开始使用共同物理时钟，因此同采集速率下各机样本数量一致。
+
+通信载荷不要求在一个0.1s区间内完成。例如传输开始于1.05s，先按1.0s记录的CSI传至1.1s，未完成的比特再按1.1s的CSI继续，最后可在区间中途结束。整次传输的功率与带宽保持不变，不在每个CSV节点重新优化；仿真器读取后来发生的信道仅用于执行，不用于提前选择资源。激活和梯度按真实float32张量字节统计，标签为int64，无压缩、协议开销或重传。
+
+初始化模型的首个前缀视为起飞前已统一下发。每次聚合只上传各机前缀状态（包括BN buffers），服务器持有独立后缀，拼接后对完整模型等权聚合。非末次聚合再下发前缀；末次以服务器得到最终完整模型为终点。等待不改变巡逻轨迹，不增加悬停能耗。
+
+默认只保存一份有用的运行记录 `output/diagnostic/summary.json`：
+
+- `split_profiles`：P0—P8四段前后向FLOPs、每样本激活/梯度/标签字节、前缀状态字节。
+- `epoch_records` / `aggregation_records`：各epoch快照样本数、尾批、损失、准确率、物理时间和聚合记录。
+- `validation_before` / `validation_after`：同一固定验证子集（默认256张）的训练前后表现；测试集未参与。
+- `physical_execution`：模拟时延、各机计算/发射能量、服务器能量、通信载荷及跨CSI节点次数。
+- `wall_timing`：本机墙钟耗时，与模拟时延分开；`parameter_change_l2` 检查模型实际发生更新。
+- `config` / `inputs` / `run`：完整参数、数据与CSV指纹、设备和协议；不会把未知电量填为零。
+
+已有 `summary.json` 不覆盖，重复运行可指定新的 `--output`。仅添加 `--save-checkpoint` 才保存 `checkpoint.pt`；该文件可作为以后统一初始化的 `initialization_checkpoint`，当前不提供恢复中断训练的功能。
+
+FLOPs来自计数器支持的算子，不能覆盖所有内存与算子开销。模拟时间由配置的cycles/FLOP和频率得到；估计能耗由有效电容及发射功率得到，均不是另一台机器或真实UAV的测量值。短诊断只用于观察参数和执行流程，不证明100epoch收敛、任务可行或优化算法优于其他方法。训练出现非有限损失/梯度会明确终止，应据诊断调整步长，不自动加入裁剪或其他未定义的优化器。

@@ -1,0 +1,6 @@
+# 作用：真实 SFL 训练诊断依赖；数据/环境准备仍可只装 requirements.txt。
+# 安装指令：python -m pip install -r requirements-training.txt
+# CPU 版或 CUDA 版 PyTorch 可先按 README 安装，本文件复用已满足的版本。
+-r requirements.txt
+# FlopCounterMode 用于在模型副本上测算真实算子的四段前后向计算量。
+torch>=2.6
