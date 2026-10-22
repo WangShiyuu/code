@@ -1,4 +1,20 @@
-"""统一入口：先准备数据，再按实际容量生成固定飞行环境；不启动训练。"""
+"""作用：统一执行数据准备、容量解析和飞行环境生成，是日常使用的主入口。
+
+运行指令（先将工作目录切换到 code_v1）：
+    python -X utf8 -B prepare_scenario.py --stage all
+    python -X utf8 -B prepare_scenario.py --stage data
+    python -X utf8 -B prepare_scenario.py --stage environment
+    python -X utf8 -B prepare_scenario.py --config settings.json --stage all
+    python -X utf8 -B prepare_scenario.py --help
+
+输入：config.py 默认参数、可选 JSON 配置和命令行覆盖项；数据阶段还需要
+CBCL 的 Images.zip 与 Annotations.zip。environment 阶段使用已准备的 data.json。
+输出：data 阶段生成数据清单与 crops/；environment 阶段生成 environment.csv、
+scenario.json 和 patrol_map.svg。all 阶段按上述顺序执行两部分。
+
+本文件不训练神经网络，不执行切分点优化或资源优化。实际数据容量以清单为准，
+不会分别在数据模块和环境模块中重复估计。-X utf8 统一控制台编码，-B 避免字节码缓存。
+"""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +26,12 @@ from config import load_config, resolve_collection, theory_budget, validate_conf
 
 
 def read_manifest_metadata(path):
-    """标准库审计清单，不导入数据准备依赖，也不读取PNG像素。"""
+    """只使用标准库读取并审计 code_v1 数据清单。
+
+    path 可指向 data.json 或其所在目录。返回解析后的绝对路径和清单字典。
+    核验协议标识与原有指纹，防止误用旧版不等量划分或被改写的采集顺序；
+    不打开 PNG，也不引入 NumPy、Pillow 或 PyTorch，因此纯环境阶段可独立运行。
+    """
     path = Path(path).expanduser().resolve()
     if path.is_dir():
         path /= "data.json"
@@ -23,6 +44,8 @@ def read_manifest_metadata(path):
     if (not isinstance(manifest["settings"], dict)
             or manifest["settings"].get("protocol") != "code_v1_scene_holdout_iid_equal_v1"):
         raise ValueError("需使用code_v1生成的IID等量采集清单；旧缓存不会自动改写")
+    # 与 data.py 使用同一指纹规则：只对固定核心字段做稳定排序后计算SHA-256。
+    # 原清单记录的指纹不参与自己的计算，避免形成循环依赖。
     content = {key: manifest[key] for key in keys}
     digest = hashlib.sha256(json.dumps(content, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     if manifest.get("fingerprint") != digest:
@@ -31,6 +54,7 @@ def read_manifest_metadata(path):
 
 
 def build_parser():
+    """定义统一命令行；参数未显式传入时，继续使用 config.py/JSON 中的值。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage", choices=("all", "data", "environment"), default="all")
     parser.add_argument("--config", help="可选JSON配置；覆盖config.py中相应字段")
@@ -45,7 +69,13 @@ def build_parser():
 
 
 def configuration_from_args(args):
+    """合并参数并检查一致性，优先级为命令行 > JSON配置 > CONFIG默认值。
+
+    JSON路径的解析由 load_config 负责；此处的显式命令行路径相对当前工作目录。
+    --manifest 只供环境阶段读取既有数据，不能替代 all/data 阶段的数据准备输出。
+    """
     config = load_config(args.config)
+    # 命令行名称与配置分组逐一映射；使用 is not None，避免将“未传入”误作覆盖值。
     for argument, section, key in (
         ("num_uavs", "mission", "num_uavs"),
         ("samples_per_uav", "data", "samples_per_uav"),
@@ -65,14 +95,20 @@ def configuration_from_args(args):
 
 
 def run(args):
+    """按 stage 顺序组织模块，打印概要并返回本次使用/生成的文件路径。
+
+    数据准备结束后先解析真实单机容量、初始缓存和采集速率，再生成环境。
+    data 阶段到此返回；all/environment 继续生成并读取环境，核对场景可正常回放。
+    """
     config = configuration_from_args(args)
     if args.stage in ("all", "data"):
-        # 环境命令和--help均不依赖NumPy/Pillow/PyTorch。
+        # 仅在确实准备图片时导入数据模块；--help和纯环境命令不加载图片依赖。
         from data import prepare_data
         print("准备/核验CBCL数据缓存……", flush=True)
         manifest_path = prepare_data(config)
     else:
         manifest_path = Path(args.manifest) if args.manifest else Path(config["data"]["output"]) / "data.json"
+    # 两种入口都经过同一元数据审计，保证生成环境时使用的UAV编号和容量一致。
     manifest_path, manifest = read_manifest_metadata(manifest_path)
     collection = resolve_collection(config, manifest)
     print(f"数据清单：{manifest_path}")
@@ -83,6 +119,7 @@ def run(args):
     print(f"未纳入本次训练流的训练池样本：{excluded}")
     if args.stage == "data":
         return dict(data_json=str(manifest_path))
+    # 先写出/复用场景，再用正式读取器回读；打印的是固定航迹概要，不是训练结果。
     from environment import generate_environment, EnvironmentTrace
     paths = generate_environment(config, manifest_path)
     trace = EnvironmentTrace(paths["environment_csv"], paths["scenario_json"])
@@ -94,6 +131,7 @@ def run(args):
         print(f"{key}：{path}")
     print(f"环境：{len(trace.times)} 个共同时间点，{len(trace.times) * len(trace.uav_ids)} 行；"
           "按模拟物理时间读取，未启动训练。")
+    # 理论预算只做条件性参数计算；不满足理论前提不妨碍轨迹和信道文件生成。
     try:
         budget = theory_budget(config)
         print(f"条件性充分训练预算：{budget['sufficient_epochs']} epoch；"
@@ -104,6 +142,7 @@ def run(args):
 
 
 def main(argv=None):
+    """脚本入口：argv=None时读取命令行，常见输入错误以退出码2和简明提示报告。"""
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
@@ -113,4 +152,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # 被其他代码 import 时不会自动准备数据或写入场景文件。
     main()

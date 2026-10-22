@@ -1,4 +1,7 @@
-# 仅准备CBCL数据/读取图片时需要；环境生成和CSV回放只使用Python标准库。
+# 作用：列出CBCL数据准备及图片读取依赖；在code_v1目录中安装。
+# 安装指令：python -m pip install -r requirements.txt
+# NumPy用于随机划分、数组和图像数值转换；Pillow用于ZIP图片读取、裁剪及PNG缓存。
+# 环境生成和CSV回放只使用Python标准库，不需要安装这两个包。
 numpy>=1.24
 Pillow>=10.0
 # 本次不运行训练。后续调用CBCLDataset读取张量时，另安装适配设备的PyTorch。
