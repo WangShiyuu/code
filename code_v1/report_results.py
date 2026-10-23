@@ -387,7 +387,7 @@ def _markdown(report: Mapping[str, Any], rows: list[_Metric]) -> str:
         ["无人机数量 / 固定切点 / 批大小上限", " / ".join(_text(metric(key)) for key in ("num_uavs", "split", "batch_size"))],
         ["本机设备 / 报告时间（UTC）", pair(run.get("device"), report.get("created_at_utc"))],
         ["系统模拟总时延（s）", metric("simulated_elapsed_s")],
-        ["系统已建模训练总能量（J）", metric("modeled_system_training_j")],
+        ["系统已建模训练总能量（J）", metric("modeled_system_training_j", "系统", "")],
         ["资源策略", run.get("resource_policy")],
         ["最终模型约定", run.get("endpoint")],
     ])
@@ -445,7 +445,7 @@ def _markdown(report: Mapping[str, Any], rows: list[_Metric]) -> str:
         ["其中：服务器下行", "—", metric("server_transmit_j", "服务器")],
         ["服务器聚合", metric("aggregation_s", "系统", ""), metric("server_aggregation_j", "服务器")],
         ["服务器能量小计", "—", metric("server_total_j", "服务器")],
-        ["系统总计", metric("simulated_elapsed_s"), metric("modeled_system_training_j")],
+        ["系统总计", metric("simulated_elapsed_s"), metric("modeled_system_training_j", "系统", "")],
     ])
     lines.extend([f"关键路径四项合计 {_cell(metric('critical_path_sum_s'))} s，与系统总时延之差为 {_cell(metric('critical_path_minus_elapsed_s'))} s。旧报告未记录分解时显示“未记录”。", ""])
 
