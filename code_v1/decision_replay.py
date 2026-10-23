@@ -1,6 +1,7 @@
 """作用：流式读取独立优化结果，绑定准备包，向训练提供已求解的资源。
 
-运行指令：python -X utf8 -B train_sfl.py --optimization-results output/output_时间戳_git哈希_git哈希
+运行指令：python -X utf8 -B train_sfl.py --optimization-results output/output_时间戳_git哈希
+失败优化重试：python -X utf8 -B optimize_sfl.py --prepared-run output/output_时间戳_git哈希 --retry-failed
 本模块不调用 CVXPY，不重新选择切分；它核对任务、时刻、CSI、负载和预算，
 确保训练调用的是当前物理块对应的结果，不能跨场景或跳过失败块继续执行。
 """
@@ -28,9 +29,24 @@ class DecisionReplay:
         path = locate_optimization(source)
         self.summary = json.loads(path.read_text(encoding="utf-8"))
         self.path = path
-        if (self.summary.get("status") != "completed"
-                or self.summary.get("kind") != "dynamic_uav_sfl_optimization"):
-            raise ValueError("独立优化没有完整成功，不能作为正式训练输入")
+        if self.summary.get("kind") != "dynamic_uav_sfl_optimization":
+            raise ValueError(f"输入文件不是独立优化结果：{path}")
+        if self.summary.get("status") != "completed":
+            # 在任何网络更新和 execution_started 标记之前拒绝失败优化；给出原始
+            # 求解失败原因，避免训练入口的一句笼统提示掩盖需要修复的问题。
+            failure = self.summary.get("failure") or {}
+            diagnostic = failure.get("diagnostics") or {}
+            residuals = "; ".join(f"{key}={diagnostic[key]}" for key in
+                                  ("original_feasibility", "kkt_residual", "direction_residual")
+                                  if diagnostic.get(key) is not None)
+            location = (f"epoch={failure.get('epoch', '未记录')}, "
+                        f"block={failure.get('block', '未记录')}, "
+                        f"elapsed={failure.get('time_s', '未记录')}s")
+            raise ValueError(
+                f"独立优化没有完整成功，不能训练。原因：{failure.get('reason', '优化未完成，见 optimization.json')}。"
+                f"位置：{location}。" + (f"残差：{residuals}。" if residuals else "") +
+                "请先修复优化失败原因，再复用准备包重试；不要绕过校验：\n"
+                f'python -X utf8 -B optimize_sfl.py --prepared-run "{path.parent.parent}" --retry-failed')
         if self.summary["preparation_sha256"] != digest(Path(run_directory) / "preparation.json"):
             raise ValueError("优化结果与当前准备包不一致")
         blocks, periods = path.parent / self.summary["decisions"], path.parent / self.summary["periods"]

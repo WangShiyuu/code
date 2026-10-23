@@ -547,6 +547,10 @@ def main(argv=None):
             report = run_diagnostic(args)
     except TraceHorizonError as error:
         raise SystemExit(f"诊断未完成：{error} 这表示 CSV 覆盖不足，不是违反训练时延约束。") from error
+    except (ValueError, OSError) as error:
+        # 入口校验和文件读取错误给出可直接处理的原因；动态执行中的失败
+        # 由 run_dynamic 写入摘要，不用底层 traceback 掩盖上游优化失败信息。
+        raise SystemExit(f"训练停止：{error}") from None
     report.setdefault("source_git", source_revision())
     output = Path(report["outputs"]["run_dir"])
     path = output / "summary.json"
