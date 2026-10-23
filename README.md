@@ -1,21 +1,25 @@
 # UAV-SFL 代码
 
-- `code_v0/`：旧版代码的完整本地归档；Git中按其原有忽略规则保存代码和训练记录。
-- [`code_v1/`](code_v1/README.md)：统一参数、CBCL数据划分、连续采集快照、固定巡逻轨迹、动态信道及SFL训练诊断。
+- `code_v0/`：旧代码完整归档。
+- [`code_v1/`](code_v1/README.md)：统一数据与环境，以及周期切分、块级资源优化和实际 SFL 训练。
 
-## code_v1 使用
+优化入口 `optimize_sfl.py` 只求解资源与切分，训练入口通过 `--optimization-results` 读取结果，不重复优化。输出目录后缀含当前 Git 的12位短哈希，元数据另记完整提交与未提交代码状态。
 
-修改 [`code_v1/config.py`](code_v1/config.py) 中的参数后运行：
+默认动态运行 **100 epoch、每 2 epoch 聚合**。先用独立校准信道预演成本，再按参考时长的 1.2 倍确定固定逐轮预算和总期限，生成完整分片长环境。正式块求解联合分配计算频率、上传功率及双向带宽，资源通过可行性和 KKT 审计后才提交模型更新。电量暂只统计；比较算法后续单独实现。
 
 ```powershell
 cd code_v1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-training.txt
 python -X utf8 -B prepare_scenario.py --stage all
 python -X utf8 -B example_read.py --with-data
+python -X utf8 -B train_sfl.py --prepare-only
+# 将目录替换为上一条命令打印的实际准备包。
+python -X utf8 -B optimize_sfl.py --prepared-run output/output_时间戳_git哈希
+python -X utf8 -B train_sfl.py --optimization-results output/output_时间戳_git哈希 --save-checkpoint
 ```
 
-数据准备需要本地 CBCL StreetScenes 的 `Images.zip` 和 `Annotations.zip`，可通过配置或 `--data-root` 指定。程序不下载原始数据。
+原始数据为本地 CBCL StreetScenes 的 `Images.zip` 和 `Annotations.zip`。图片缓存可复用，长环境保持原采集速率并在训练前完整生成，单个 CSV 分片不超过 20 MB。
 
-每次训练自动保存到 `code_v1/output/output_时间戳/`，其中报告、参数、环境副本及可选模型允许Git提交。可复用的图片缓存、默认共享数据/环境输入目录和虚拟环境留在本机。
+每次运行保存到 `code_v1/output/output_时间戳_git哈希/`。其中 `report.md`、`key_metrics.csv`、`summary.json`、逐块决策日志、参数、长环境及可选模型允许 Git 提交。默认共享数据/环境缓存和虚拟环境留在本机。原固定诊断仍可通过 `--mode diagnostic --epochs 2 --split P4` 运行，历史结果保持原样。
 
-首次训练另安装 `code_v1/requirements-training.txt`，运行 `python -X utf8 -B train_sfl.py`。默认完成2个epoch和1次聚合，不检查电量或正式任务时限；固定切点和参考资源，后续再接入优化与独立比较代码。每次结果含 `summary.json`、`report.md`、`key_metrics.csv`。已有记录可用 `python -X utf8 -B report_results.py --report 记录路径` 汇总，详细步骤及输出解释见 [`code_v1/README.md`](code_v1/README.md)。
+另一台电脑的 Conda、D 盘完整 PowerShell 命令、各代码作用、参数和报告说明见 [`code_v1/README.md`](code_v1/README.md)。

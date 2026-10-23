@@ -2,7 +2,7 @@
 
 运行方式（在本模块所在目录）：
     python -X utf8 -B report_results.py
-    python -X utf8 -B report_results.py --report output/output_时间戳/summary.json
+    python -X utf8 -B report_results.py --report output/output_时间戳_git哈希/summary.json
 
 默认按目录名字选择 output/output_*/summary.json 中最新的一份；若没有新版
 目录，则回退到旧的 output/diagnostic/summary.json。两个结果文件直接写在
@@ -482,6 +482,243 @@ def _markdown(report: Mapping[str, Any], rows: list[_Metric]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _dynamic_metrics(report: Mapping[str, Any]) -> list[_Metric]:
+    """整理动态模式的实际决策与已提交块；不使用参考资源替代实际资源。
+
+    资源区间来自 resource_ranges，通信字节与成本来自物理台账。失败轮的
+    快照容量只是当轮计划，访问次数和不同样本数仅统计已提交的批次。
+    该路径独立于旧固定诊断，使旧 summary 的解释和输出保持原样。
+    """
+    run = _mapping(report.get("run"))
+    cfg = _mapping(report.get("config"))
+    physical = _mapping(report.get("physical_execution"))
+    calibration = _mapping(report.get("calibration"))
+    collection = _mapping(_mapping(report.get("inputs")).get("collection"))
+    participation = _mapping(report.get("data_participation"))
+    solver = _mapping(report.get("solver_statistics"))
+    uavs = physical.get("uavs", [])
+    n = _mapping(cfg.get("mission")).get("num_uavs", len(uavs))
+    rows: list[_Metric] = []
+
+    def add(section, key, label, value, unit="", scope="实际记录", entity="系统", epoch=""):
+        """追加单项；缺失值保持 None，不能用参考数值补齐。"""
+        rows.append(_Metric(section, key, label, entity, epoch, value, unit, scope))
+
+    for key, label, unit in (
+        ("status", "运行状态", ""), ("requested_epochs", "请求训练 epoch", "epoch"),
+        ("epochs", "完成训练 epoch", "epoch"), ("aggregation_period", "聚合间隔", "epoch/次"),
+        ("aggregations", "完成聚合次数", "次"), ("last_aggregated_epoch", "检查点对应 epoch", "epoch"),
+        ("device", "本机训练设备", ""), ("resource_policy", "实际资源决策方法", ""),
+        ("task_epoch_budget_enforced", "固定逐轮时限已启用", ""),
+        ("energy_constraints_enforced", "电量硬约束已启用", ""),
+    ):
+        add("运行概况", key, label, run.get(key), unit)
+    add("运行概况", "num_uavs", "无人机数量", n, "架")
+    add("运行概况", "training_blocks", "已提交训练块", physical.get("training_blocks"), "块")
+    add("运行概况", "failure_reason", "停止原因", _mapping(report.get("failure")).get("reason"),
+        scope="failed 时查看；completed 时不适用")
+    add("运行概况", "endpoint", "检查点保存约定", run.get("endpoint"))
+    add("运行概况", "channel_policy", "执行信道约定", physical.get("channel_policy"))
+    version = _mapping(report.get("source_git"))
+    add("运行概况", "git_commit", "运行代码的Git提交", version.get("commit"))
+    add("运行概况", "code_modified", "代码存在未提交修改", version.get("code_modified"))
+    decision_input = _mapping(report.get("optimization_input"))
+    add("运行概况", "optimization_mode", "决策调用模式", decision_input.get("mode"))
+    add("运行概况", "optimization_input_path", "独立优化结果", decision_input.get("path"))
+    for key, label, unit in (
+        ("calibration_seed", "独立校准信道种子", ""), ("formal_seed", "正式信道种子", ""),
+        ("total_time_s", "参考预演总时长", "s"), ("deadline_multiplier", "期限倍率", "倍"),
+        ("deadline_s", "正式总期限", "s"), ("network_updates", "预演神经网络更新次数", "次"),
+    ):
+        add("时间预算", key, label, calibration.get(key), unit, "独立校准信道参考预演")
+    for index, budget in enumerate(calibration.get("epoch_budgets_s", []), 1):
+        add("时间预算", "epoch_budget_s", "固定 epoch 预算", budget, "s", "本轮独立使用，不借用其他轮预算", epoch=index)
+
+    labels = {"frequency_hz": ("机载计算频率", "Hz"), "upload_power_w": ("上传功率", "W"),
+              "uplink_bandwidth_hz": ("上行带宽", "Hz"), "downlink_bandwidth_hz": ("下行带宽", "Hz")}
+    ranges = _mapping(report.get("resource_ranges"))
+    for key, (label, unit) in labels.items():
+        values = ranges.get(key, [])
+        for uav in range(int(n or 0)):
+            limits = _mapping(values[uav] if uav < len(values) else {})
+            for bound in ("min", "max"):
+                add("实际资源区间", key + "_" + bound, label + ("最小值" if bound == "min" else "最大值"),
+                    limits.get(bound), unit, "仅已提交块中该变量有效时的实际求解值；零负载不计", f"UAV {uav}")
+            if key == "frequency_hz":
+                for bound in ("min", "max"):
+                    f, kappa = limits.get(bound), _mapping(cfg.get("uav")).get("kappa")
+                    power = kappa * f ** 3 if _number(f) and _number(kappa) else None
+                    add("实际资源区间", "compute_power_w_" + bound,
+                        "机载计算动态功率" + ("最小值" if bound == "min" else "最大值"), power, "W",
+                        "按实际频率区间计算 kappa*f^3；不是固定参考功率", f"UAV {uav}")
+    server_cfg = _mapping(cfg.get("server"))
+    add("实际资源区间", "server_frequency_hz", "服务器每分支固定计算频率", server_cfg.get("frequency_hz"), "Hz", entity="服务器")
+    add("实际资源区间", "server_downlink_power_w", "每条下行链路固定发射功率", server_cfg.get("downlink_power_w"), "W", entity="服务器")
+    for record in report.get("period_records", []):
+        record = _mapping(record)
+        epoch = record.get("start_epoch")
+        for key, label, unit in (("selected_cuts", "周期选择的各机切点", ""), ("time_s", "切分决策物理时刻", "s"),
+                                 ("window_observations", "历史块观测数", "次"), ("status", "切分选择状态", ""),
+                                 ("score_before_j", "切分扫描前参考评分", "J"), ("score_after_j", "切分扫描后参考评分", "J")):
+            add("周期切分", key, label, record.get(key), unit,
+                "决策记录；真正执行的切点见 epoch 和逐块日志，选择后失败不视为已执行", epoch=epoch)
+    for record in report.get("epoch_records", []):
+        record = _mapping(record)
+        epoch = record.get("epoch")
+        for key, label, unit in (("completed", "本轮训练遍历完成", ""), ("samples_per_uav", "每机冻结快照样本数", "样本"),
+                                 ("committed_batches", "已提交同步批次", "批"), ("batches_per_uav", "计划每机批次数", "批"),
+                                 ("tail_batch_samples", "计划尾批样本数", "样本"), ("cuts", "本轮执行切点", ""),
+                                 ("mean_losses", "各机训练平均损失", ""), ("accuracies", "各机训练准确率", "")):
+            add("逐轮训练", key, label, record.get(key), unit, "快照大小不代表失败轮已全部训练", epoch=epoch)
+        start, end = record.get("start_s"), record.get("end_with_aggregation_s")
+        add("逐轮训练", "epoch_elapsed_s", "本轮已提交物理时长", end - start if _number(start) and _number(end) else None,
+            "s", "含适用的聚合，失败轮仅计已提交部分", epoch=epoch)
+        costs = _mapping(record.get("costs"))
+        for key, label in (("uav_compute_j", "UAV 计算能量"), ("uav_transmit_j", "UAV 上传能量"),
+                           ("server_compute_j", "服务器计算能量"), ("server_transmit_j", "服务器下行能量"),
+                           ("aggregation_j", "聚合能量"), ("modeled_system_training_j", "系统训练总能量")):
+            add("逐轮训练", key, label, costs.get(key), "J", "该轮已提交块的实际资源模型成本", epoch=epoch)
+    for key, label, unit in (("max_samples_per_uav", "每机样本容量", "样本"),
+                             ("initial_samples_per_uav", "初始缓存", "样本"),
+                             ("rate_samples_per_s", "固定采集速率", "样本/s")):
+        add("采集与样本", key, label, collection.get(key), unit, entity="每机")
+    for key, label in (("unique_trained_samples_per_uav", "参与训练的不同样本数"),
+                       ("sample_visits_per_uav", "累计样本访问次数"),
+                       ("available_samples_per_uav_at_end", "终止时已到达样本数")):
+        add("采集与样本", key, label, participation.get(key), "样本次" if key == "sample_visits_per_uav" else "样本",
+            "参与量仅统计已提交批次；终止时到达量可包含尚未训练样本", "每机")
+    for ledger in uavs:
+        ledger = _mapping(ledger)
+        for key, label, unit in (("compute_s", "前缀计算工作时长", "s"), ("up_s", "上行工作时长", "s"),
+                                 ("down_s", "下行工作时长", "s"), ("barrier_wait_s", "同步等待时长", "s"),
+                                 ("compute_j", "前缀计算能量", "J"), ("transmit_j", "上传发射能量", "J"),
+                                 ("modeled_training_j", "已建模训练能量", "J")):
+            add("每机计量", key, label, ledger.get(key), unit, "每机工作量；并行工作时长不能相加当系统时延", f"UAV {ledger.get('uav_id')}")
+    server = _mapping(physical.get("server"))
+    compute = _sum([_sum([_mapping(v).get("compute_j") for v in uavs]), server.get("compute_j")])
+    communication = _sum([_sum([_mapping(v).get("transmit_j") for v in uavs]), server.get("transmit_j")])
+    for key, label, value, unit in (("simulated_elapsed_s", "系统模拟总时延", physical.get("simulated_elapsed_s"), "s"),
+                                    ("modeled_system_training_j", "系统已建模训练总能量", physical.get("modeled_system_training_j"), "J"),
+                                    ("all_compute_j", "系统前后缀计算能量", compute, "J"),
+                                    ("all_transmit_j", "系统通信发射能量", communication, "J"),
+                                    ("aggregation_j", "服务器聚合能量", server.get("aggregation_j"), "J")):
+        add("系统成本", key, label, value, unit, "已提交块；按实际资源与块起始冻结 CSI 核算")
+    critical = _mapping(physical.get("critical_path"))
+    for key, label in (("uav_compute_s", "关键路径 UAV 计算"), ("server_compute_s", "关键路径服务器计算"),
+                       ("communication_s", "关键路径通信"), ("aggregation_s", "关键路径聚合")):
+        add("关键路径", key, label, critical.get(key), "s", "每个同步块的关键分支累计")
+    total = _sum([critical.get(key) for key in ("uav_compute_s", "server_compute_s", "communication_s", "aggregation_s")])
+    elapsed = physical.get("simulated_elapsed_s")
+    add("关键路径", "critical_path_minus_elapsed_s", "分项和减总时延", total - elapsed if _number(total) and _number(elapsed) else None, "s")
+    for category, label in (("activations_and_labels_up", "激活与标签上传"), ("gradients_down", "边界梯度下传"),
+                            ("prefix_state_up", "旧前缀聚合上传"), ("prefix_state_down", "新前缀聚合下发")):
+        ledger = _mapping(_mapping(physical.get("communication")).get(category))
+        add("实际通信载荷", category + "_bytes", label, ledger.get("bytes"), "B", "实际执行台账；零负载及末次下发不产生通信")
+        add("实际通信载荷", category + "_transmissions", label + "传输次数", ledger.get("transmissions"), "次")
+    for key, label, unit in (("blocks", "通过并已提交的求解块数", "块"), ("wall_s", "全部求解墙钟时间", "s"),
+                             ("max_original_feasibility", "已提交块最大原约束残差", ""),
+                             ("max_kkt_residual", "已提交块最大原问题 KKT 残差", ""),
+                             ("max_direction_residual", "已提交块最大方向残差", "")):
+        add("求解诊断", key, label, solver.get(key), unit, "未提交失败块详见 block_decisions.jsonl")
+    optimization = _mapping(cfg.get("optimization"))
+    for key, label in (("feasibility_tolerance", "原约束可行性容差"), ("kkt_tolerance", "原问题 KKT 容差"),
+                       ("direction_tolerance", "方向容差")):
+        add("求解诊断", key, label, optimization.get(key))
+    for key, label in (("solver_s", "求解墙钟"), ("preparation_s", "准备包墙钟"),
+                       ("neural_compute_and_sgd_s", "本机网络算子及SGD墙钟"),
+                       ("total_before_report_write_s", "本次入口总墙钟（写报告前）")):
+        add("墙钟与验证", key, label, _mapping(report.get("wall_timing")).get(key), "s", "不计入物理时延，分项可能包含在总墙钟内")
+    add("墙钟与验证", "offline_solver_wall_s", "独立优化墙钟", decision_input.get("offline_solver_wall_s"),
+        "s", "单独优化入口的耗时；重放训练不会重复求解")
+    add("墙钟与验证", "parameter_change_l2", "最近聚合模型参数变化 L2", report.get("parameter_change_l2"))
+    for stage in ("before", "after"):
+        values = _mapping(report.get("validation_" + stage))
+        for key, label in (("mean_loss", "平均损失"), ("accuracy", "准确率"), ("samples", "样本数")):
+            add("墙钟与验证", "validation_" + stage + "_" + key, ("训练前验证" if stage == "before" else "最近聚合验证") + label,
+                values.get(key), "样本" if key == "samples" else "", "固定验证子集；准确率为 0 到 1")
+    return rows
+
+
+def _dynamic_markdown(report: Mapping[str, Any], rows: list[_Metric]) -> str:
+    """生成动态实验报告：突出运行状态、实际资源、成本、预算与失败边界。"""
+    run = _mapping(report.get("run"))
+    lines = ["# 动态 UAV-SFL 实验结果", "", f"状态：**{_cell(run.get('status'))}**；请求 {_cell(run.get('requested_epochs'))} epoch，"
+             f"完成 {_cell(run.get('epochs'))} epoch、{_cell(run.get('aggregations'))} 次聚合。", ""]
+    failure = _mapping(report.get("failure"))
+    lines += [f"代码提交：`{_text(_mapping(report.get('source_git')).get('commit'))}`；决策模式："
+              f"{_cell(_mapping(report.get('optimization_input')).get('mode'))}。", ""]
+    if failure:
+        lines += [f"停止原因：{_cell(failure.get('reason'))}。仅统计已提交批次；检查点对应最近完成聚合的 epoch {_cell(run.get('last_aggregated_epoch'))}。", ""]
+    lines += ["资源由块求解器实际决策；时延与能耗按物理模型核算。求解、本机算子、读图及验证墙钟与飞行物理时间分开记录。", ""]
+
+    def metric(key, entity="系统", epoch=""):
+        """按指标键及对象读取已整理的实际记录，缺失时保留未记录。"""
+        return next((row.value for row in rows if row.key == key and row.entity == entity and row.epoch == epoch), None)
+
+    def table(title, headers, values):
+        """将平行字段写成Markdown表格，统一转义路径和结构化单元格。"""
+        lines.extend(["## " + title, "", "| " + " | ".join(headers) + " |", "| " + " | ".join("---" for _ in headers) + " |"])
+        lines.extend("| " + " | ".join(_cell(value) for value in values_row) + " |" for values_row in values)
+        lines.append("")
+
+    def interval(key, entity):
+        """格式化实际分配区间；没有活动负载时不补入参考值。"""
+        low, high = metric(key + "_min", entity), metric(key + "_max", entity)
+        return MISSING if low is None or high is None else _text(low, compact=True) + " ～ " + _text(high, compact=True)
+
+    table("总成本与时间预算", ["指标", "数值", "单位"], [
+        ["实际系统模拟时延", metric("simulated_elapsed_s"), "s"],
+        ["系统训练计算与通信能量（含聚合）", metric("modeled_system_training_j"), "J"],
+        ["前后缀计算能量", metric("all_compute_j"), "J"],
+        ["上下行发射能量", metric("all_transmit_j"), "J"],
+        ["聚合能量", metric("aggregation_j"), "J"],
+        ["独立信道参考预演时长", metric("total_time_s"), "s"],
+        ["总期限", metric("deadline_s"), "s"],
+        ["校准 / 正式信道种子", f"{_text(metric('calibration_seed'))} / {_text(metric('formal_seed'))}", ""],
+    ])
+    table("逐周期切分决策", ["起始 epoch", "时刻 / s", "各 UAV 切点", "历史块观测数", "状态", "参考评分 / J"], [
+        [r.get("start_epoch"), r.get("time_s"), r.get("selected_cuts"), r.get("window_observations"), r.get("status"), r.get("score_after_j")]
+        for r in report.get("period_records", [])])
+    lines += ["周期内切点固定，平局保留原切点。上表为决策结果；决策后失败的切点不能视为已执行，实际执行见下表和逐块日志。", ""]
+    table("逐 epoch 训练与成本", ["epoch", "完成", "切点", "每机快照样本", "提交批 / 计划批", "预算 / s", "已提交时长 / s", "能量 / J"], [
+        [r.get("epoch"), r.get("completed"), r.get("cuts"), r.get("samples_per_uav"),
+         f"{_text(r.get('committed_batches'))} / {_text(r.get('batches_per_uav'))}", r.get("budget_s"),
+         metric("epoch_elapsed_s", epoch=r.get("epoch")), _mapping(r.get("costs")).get("modeled_system_training_j")]
+        for r in report.get("epoch_records", [])])
+    n = metric("num_uavs") or 0
+    table("已提交块的实际资源区间", ["无人机", "计算频率 / Hz", "计算动态功率 / W", "上传功率 / W", "上行带宽 / Hz", "下行带宽 / Hz"], [
+        [f"UAV {i}", interval("frequency_hz", f"UAV {i}"), interval("compute_power_w", f"UAV {i}"),
+         interval("upload_power_w", f"UAV {i}"), interval("uplink_bandwidth_hz", f"UAV {i}"), interval("downlink_bandwidth_hz", f"UAV {i}")]
+        for i in range(int(n))])
+    lines += ["区间只包含有效非零负载变量。计算动态功率为 kappa·f³；聚合块不创建计算变量，末次聚合不创建下行变量。服务器每分支频率为 "
+              + _cell(metric("server_frequency_hz", "服务器")) + " Hz，每链路下行功率为 "
+              + _cell(metric("server_downlink_power_w", "服务器")) + " W。", ""]
+    table("样本参与", ["指标", "数值", "单位"], [[label, metric(key, "每机"), unit] for key, label, unit in (
+        ("max_samples_per_uav", "每机容量", "样本"), ("initial_samples_per_uav", "每机初始缓存", "样本"),
+        ("rate_samples_per_s", "固定采集速率", "样本/s"), ("unique_trained_samples_per_uav", "各机实际训练不同样本", "样本"),
+        ("sample_visits_per_uav", "各机已提交样本访问次数", "样本次"), ("available_samples_per_uav_at_end", "每机终止时已到达样本", "样本"))])
+    table("物理时延与每机成本", ["无人机", "计算 / s", "上行 / s", "下行 / s", "等待 / s", "计算 / J", "上传 / J"], [
+        [f"UAV {i}", *(metric(key, f"UAV {i}") for key in ("compute_s", "up_s", "down_s", "barrier_wait_s", "compute_j", "transmit_j"))]
+        for i in range(int(n))])
+    table("并行关键路径", ["分项", "时延 / s"], [[label, metric(key)] for key, label in (
+        ("uav_compute_s", "UAV 计算"), ("server_compute_s", "服务器计算"), ("communication_s", "通信"),
+        ("aggregation_s", "聚合"), ("critical_path_minus_elapsed_s", "分项和减系统时延"))])
+    table("实际通信载荷", ["类别", "字节 / B", "传输次数"], [[label, metric(key + "_bytes"), metric(key + "_transmissions")] for key, label in (
+        ("activations_and_labels_up", "激活与标签上传"), ("gradients_down", "边界梯度下传"),
+        ("prefix_state_up", "旧前缀聚合上传"), ("prefix_state_down", "新前缀聚合下发"))])
+    table("求解诊断与墙钟", ["指标", "数值", "单位"], [[label, metric(key), unit] for key, label, unit in (
+        ("blocks", "成功并提交求解块数", "块"), ("max_original_feasibility", "最大原约束残差", ""),
+        ("max_kkt_residual", "最大原问题 KKT 残差", ""), ("feasibility_tolerance", "原约束容差", ""),
+        ("kkt_tolerance", "KKT 容差", ""), ("solver_s", "求解墙钟", "s"),
+        ("preparation_s", "准备包墙钟", "s"), ("total_before_report_write_s", "本次入口总墙钟（写报告前）", "s"))])
+    table("固定验证子集", ["阶段", "损失", "准确率（0～1）", "样本数"], [
+        [label, metric("validation_" + stage + "_mean_loss"), metric("validation_" + stage + "_accuracy"), metric("validation_" + stage + "_samples")]
+        for stage, label in (("before", "训练前"), ("after", "最近完成聚合"))])
+    lines += ["逐块资源、负载、原目标下降历史、约束与 KKT 诊断见 `block_decisions.jsonl`；逐周期扫描明细见 `period_splits.json`。", "",
+              "训练能量暂仅统计，未启用电池硬约束。初始统一下发视为起飞前完成；固定飞行、采集、接收、空闲等未标定能量不纳入上述训练总能量。100 epoch 是任务设置，验证分类准确率不能代替平均期望梯度精度的理论收敛条件。", ""]
+    return "\n".join(lines) + "\n"
+
+
 def write_run_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[str, Path]:
     """写出 key_metrics.csv 和 report.md，返回两个绝对 Path 的字典。
 
@@ -494,7 +731,8 @@ def write_run_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[
         raise ValueError("训练报告必须为 JSON 对象/映射")
     destination = Path(output_dir).expanduser().resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    rows = _metrics(report)
+    dynamic = report.get("kind") == "dynamic_uav_sfl"
+    rows = _dynamic_metrics(report) if dynamic else _metrics(report)
     csv_path, markdown_path = destination / "key_metrics.csv", destination / "report.md"
     with csv_path.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream)
@@ -502,7 +740,7 @@ def write_run_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[
         for row in rows:
             writer.writerow([row.section, row.key, row.label, row.entity, row.epoch, _text(row.value), row.unit, row.scope])
 
-    markdown_path.write_text(_markdown(report, rows), encoding="utf-8")
+    markdown_path.write_text(_dynamic_markdown(report, rows) if dynamic else _markdown(report, rows), encoding="utf-8")
     return {"key_metrics_csv": csv_path, "report_md": markdown_path}
 
 

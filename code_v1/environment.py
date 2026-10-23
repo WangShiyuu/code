@@ -394,6 +394,17 @@ class EnvironmentTrace:
                 raise ValueError('Scenario and CSV mission durations do not match')
             self._server_position = self.scenario.get('config', {}).get('server', {}).get('position_m')
 
+    @classmethod
+    def from_scenario(cls, path):
+        """读取场景目录、scenario.json 或旧单 CSV；长环境仅缓存少量分片。
+
+        延迟导入避免旧的环境准备流程增加依赖，也避免两个模块相互导入。
+        原有 ``EnvironmentTrace(csv_path)`` 行为保持不变；新训练入口应使用
+        本工厂方法，使旧场景与长时域分片场景使用同一查询接口。
+        """
+        from long_environment import open_environment
+        return open_environment(path)
+
     def _index(self, time_s):
         """校验查询时间并返回不晚于该时刻的最后一个观测下标。
 

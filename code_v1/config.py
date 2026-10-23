@@ -147,6 +147,19 @@ CONFIG = {
         # max_sweeps 是候选坐标扫描次数；energy_tolerance_j 为能耗比较容差（J）。
         "channel_window_size": 20, "max_sweeps": 1, "energy_tolerance_j": 1e-9,
     },
+    # 动态主算法：时间预算来自独立信道预演；电池暂只核算，不作为求解约束。
+    # 这些控制参数不参与图片缓存指纹，不会触发重新裁剪或数据划分。
+    "optimization": {
+        "deadline_factor": 1.2,
+        # None 使用正式信道 seed+1；显式种子必须与正式 seed 不同。
+        "calibration_seed": None,
+        "max_part_bytes": 20_000_000,
+        "proximal_coefficient": 0.01, "backtracking_ratio": 0.5,
+        "armijo_coefficient": 0.0001,
+        "max_iterations": 100, "max_backtracks": 30,
+        "direction_tolerance": 1e-5, "feasibility_tolerance": 1e-6,
+        "kkt_tolerance": 1e-4,
+    },
     "energy": {
         # 每架 UAV 共用的电量参数，单位 J。None 表示尚未校准，不能解释成 0。
         # 仅准备数据/环境时可保留 None；执行训练电量核算前必须全部填全。
@@ -356,6 +369,24 @@ def validate_config(config):
     for key in ("channel_window_size", "max_sweeps"):
         _integer(selection[key], f"selection.{key}")
     _number(selection["energy_tolerance_j"], "selection.energy_tolerance_j", inclusive=True)
+    optimization = config["optimization"]
+    for key in ("deadline_factor", "proximal_coefficient", "direction_tolerance",
+                "feasibility_tolerance", "kkt_tolerance"):
+        _number(optimization[key], f"optimization.{key}")
+    if optimization["deadline_factor"] < 1:
+        raise ValueError("deadline_factor 不得小于1")
+    for key in ("backtracking_ratio", "armijo_coefficient"):
+        _number(optimization[key], f"optimization.{key}")
+        if optimization[key] >= 1:
+            raise ValueError(f"optimization.{key} 必须小于1")
+    for key in ("max_iterations", "max_backtracks", "max_part_bytes"):
+        _integer(optimization[key], f"optimization.{key}")
+    if not 1024 <= optimization["max_part_bytes"] <= 20_000_000:
+        raise ValueError("max_part_bytes 必须在1024至20,000,000之间")
+    if optimization["calibration_seed"] is not None:
+        _integer(optimization["calibration_seed"], "optimization.calibration_seed", 0)
+        if optimization["calibration_seed"] == channel["seed"]:
+            raise ValueError("校准信道种子必须独立于正式信道种子")
     # 第七步：保留未知电量的 None，但已填写的值必须有效；不能把未知值当零。
     for key, value in config["energy"].items():
         if value is not None:

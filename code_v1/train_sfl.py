@@ -1,27 +1,30 @@
-"""作用：运行连续采集 UAV-SFL 的首次训练诊断，记录训练、通信和计算量级。
+"""作用：连续采集 UAV-SFL 统一入口，默认运行周期切分与块资源优化主算法。
 
 运行指令（在 code_v1 目录，先安装 requirements-training.txt）：
     python -X utf8 -B train_sfl.py
-    python -X utf8 -B train_sfl.py --epochs 2 --device cuda
+    python -X utf8 -B train_sfl.py --optimization-results output/output_时间戳_git哈希 --save-checkpoint
+    python -X utf8 -B train_sfl.py --prepare-only
+    python -X utf8 -B train_sfl.py --prepared-run output/output_时间戳_git哈希 --save-checkpoint
+    python -X utf8 -B train_sfl.py --mode diagnostic --epochs 2 --split P4
     python -X utf8 -B train_sfl.py --help
 
-先运行 prepare_scenario.py --stage all，准备真实数据及环境。本入口默认完成
-一个聚合周期，即 config.py 中的 aggregation_period 个本地 epoch；当前为 2。
---epochs 是本次诊断的有限运行规模，不采用理论 total_epochs，不检查任务
-时限或电量约束。CSV 仍须覆盖实际模拟时间，覆盖不足会报错，不能外推信道。
+先运行 prepare_scenario.py --stage all 准备真实数据。动态模式默认100 epoch，
+每2 epoch聚合，独立信道预演确定1.2倍的逐轮预算，然后生成完整分片长环境。
+--prepare-only 不更新网络；--prepared-run 绑定已有准备包执行。求解不收敛或
+原约束未通过时停止，保存失败原因和已提交批次，不回退固定资源。
 
 训练使用同一初始 ResNet18、冻结 BN、普通 SGD 和按快照大小归一化的步长。
 每个 epoch 在共同物理时间冻结各机累计样本，完整遍历，保留尾批。每批执行
 前缀前向、激活/标签上传、后缀前后向、梯度下传、前缀反向，然后批末同步。
 本机顺序计算独立模型分支；模拟时间按服务器分支并行取最慢完成时间。
 
-本次固定切分和参考资源，自动测算切分画像，不执行切分或资源优化。后续
-比较算法放在其他代码中。统一模型的初始下发视为起飞前已完成，不计入此次
+--mode diagnostic 保留旧固定切分、参考资源和逐CSV节点传输诊断，默认2 epoch；
+动态模式的块内CSI冻结。后续比较算法放在其他代码中。统一模型的初始下发视为起飞前已完成，不计入此次
 统计；最后聚合模型留在服务器，不再下发用于下一周期的前缀。
 
-每次自动新建 output/output_本地时间戳/，保存 summary.json、report.md、
+每次自动新建 output/output_本地时间戳_git哈希/，保存 summary.json、report.md、
 key_metrics.csv 和环境输入副本。--output 指定父目录，仍会在其下新建本次
-output_时间戳目录；--save-checkpoint 可另存最终聚合模型。电脑墙钟耗时、模拟时延和模型
+output_时间戳_git哈希目录；--save-checkpoint 可另存最终聚合模型。电脑墙钟耗时、模拟时延和模型
 估计能耗分开报告；不能据此宣称 UAV 实测能耗或达到理论收敛条件。
 """
 from __future__ import annotations
@@ -41,6 +44,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Subset
 
+from run_output import create_run_directory, source_revision
 from config import ROOT, load_config, resolve_collection
 from data import AcquisitionSnapshots, CBCLDataset, validate_manifest
 from environment import EnvironmentTrace
@@ -61,11 +65,18 @@ def parse_args(argv=None):
     """解析诊断规模与路径；物理、采集和训练参数仍读取统一 config.py。"""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", type=Path, help="可选 JSON 局部配置，规则与场景入口一致")
+    parser.add_argument("--mode", choices=("dynamic", "diagnostic"), default="dynamic",
+                        help="默认动态主算法；diagnostic 保留固定切分参考资源诊断")
+    preparation = parser.add_mutually_exclusive_group()
+    preparation.add_argument("--prepare-only", action="store_true", help="只预演成本及准备长环境，不更新神经网络")
+    preparation.add_argument("--prepared-run", type=Path, help="使用已有 output_时间戳_git哈希 准备包执行训练")
+    parser.add_argument("--optimization-results", type=Path,
+                        help="读取独立优化结果目录或 optimization.json；训练不再运行求解器")
     parser.add_argument("--scenario", type=Path, help="含 environment.csv/scenario.json 的目录")
     parser.add_argument("--manifest", type=Path, help="真实 data.json；默认读取配置中的数据输出目录")
     parser.add_argument("--output", type=Path, default=ROOT / "output",
-                        help="输出父目录；每次自动新建 output_时间戳 子目录，保留历次运行")
-    parser.add_argument("--epochs", type=_positive_int, help="本次 epoch 数，默认一个聚合周期，须为聚合间隔的倍数")
+                        help="输出父目录；每次自动新建 output_时间戳_git哈希 子目录，保留历次运行")
+    parser.add_argument("--epochs", type=_positive_int, help="动态默认100；诊断默认2；须为聚合间隔的倍数")
     parser.add_argument("--split", choices=SPLIT_POINTS, help="本次固定切点，默认配置 initial_split")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), help="本机执行设备，默认读取配置")
     parser.add_argument("--threads", type=_positive_int, default=min(8, os.cpu_count() or 1),
@@ -74,26 +85,6 @@ def parse_args(argv=None):
                         help="固定验证子集大小，上限为完整验证集大小；不读取测试集")
     parser.add_argument("--save-checkpoint", action="store_true", help="另存最终聚合模型 checkpoint.pt")
     return parser.parse_args(argv)
-
-
-def create_run_directory(parent):
-    """在输出父目录下原子创建独立运行目录，不覆盖同名文件或已有实验。
-
-    时间戳使用运行机器的本地时间并精确到微秒；极少数重名时附加序号。
-    mkdir(exist_ok=False) 使同一时刻启动的两个进程也不会共用结果目录。
-    """
-    parent = Path(parent).expanduser().resolve()
-    parent.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
-    for suffix in range(10000):
-        name = f"output_{stamp}" + (f"_{suffix:02d}" if suffix else "")
-        candidate = parent / name
-        try:
-            candidate.mkdir()
-            return candidate
-        except FileExistsError:
-            continue
-    raise FileExistsError("无法分配唯一运行目录，请检查输出父目录")
 
 
 def archive_environment(trace, scenario_dir, output):
@@ -180,7 +171,7 @@ def evaluate(model, dataset, indices, batch_size, workers, device):
     return {"samples": count, "mean_loss": total_loss / count, "accuracy": correct / count}
 
 
-def split_step(model, optimizer, images, labels, cut, step_size, device):
+def split_step(model, optimizer, images, labels, cut, step_size, device, *, commit=True):
     """执行一次精确 SFL 更新，返回损失、正确数、实际字节和本机阶段计时。
 
     detach/clone 模拟跨设备边界；后缀反向产生切分梯度，再传回前缀反向。
@@ -212,7 +203,9 @@ def split_step(model, optimizer, images, labels, cut, step_size, device):
     if any(parameter.grad is not None and not torch.isfinite(parameter.grad).all()
            for parameter in model.parameters()):
         raise FloatingPointError("模型梯度出现非有限值")
-    optimizer.step()
+    # 动态模式先收齐所有 UAV 的有限梯度，再由调用方统一提交；诊断兼容旧行为。
+    if commit:
+        optimizer.step()
     _sync(device)
     end = time.perf_counter()
     return {
@@ -542,20 +535,32 @@ def main(argv=None):
     """运行诊断，将 JSON、关键指标表和中文报告写入本次独立结果目录。"""
     args = parse_args(argv)
     try:
-        report = run_diagnostic(args)
+        if args.mode == "dynamic":
+            from dynamic_training import run_dynamic
+            report = run_dynamic(args)
+            if report.get("prepared_only"):
+                print(f"Preparation complete: {report['outputs']['run_dir']}", flush=True)
+                return
+        else:
+            if args.prepare_only or args.prepared_run or args.optimization_results:
+                raise ValueError("prepare 参数仅适用于动态模式")
+            report = run_diagnostic(args)
     except TraceHorizonError as error:
         raise SystemExit(f"诊断未完成：{error} 这表示 CSV 覆盖不足，不是违反训练时延约束。") from error
+    report.setdefault("source_git", source_revision())
     output = Path(report["outputs"]["run_dir"])
     path = output / "summary.json"
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     tables = write_run_report(report, output)
     physical = report["physical_execution"]
-    print(f"Completed. Simulated={physical['simulated_elapsed_s']:.3f}s; "
+    print(f"{report['run'].get('status', 'completed')}. Simulated={physical['simulated_elapsed_s']:.3f}s; "
           f"modeled training energy={physical['modeled_system_training_j']:.3f}J; "
           f"parameter change L2={report['parameter_change_l2']:.6g}", flush=True)
     print(f"Report: {path}", flush=True)
     print(f"Key metrics: {tables['key_metrics_csv']}", flush=True)
     print(f"Readable report: {tables['report_md']}", flush=True)
+    if report.get("failure"):
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

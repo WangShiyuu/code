@@ -4,3 +4,7 @@
 -r requirements.txt
 # FlopCounterMode 用于在模型副本上测算真实算子的四段前后向计算量。
 torch>=2.6
+# Clarabel 原生支持相对熵所需的指数锥；SciPy 用于原问题 KKT 乘子证书。
+cvxpy>=1.6
+clarabel>=0.10
+scipy>=1.13
