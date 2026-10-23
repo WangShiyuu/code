@@ -72,6 +72,47 @@ def _rate(bandwidth, power, gain, noise):
     return bandwidth * math.log1p(power * gain / (noise * bandwidth)) / math.log(2.0)
 
 
+def minimum_time_lower_bound(problem, config):
+    """返回不依赖求解器的乐观时延下界，仅用于证明某些块确实不可行。
+
+    对每架 UAV 分别允许它独占本方向全部带宽，使用最大计算频率及最大
+    上传功率。Shannon 速率随带宽和功率单调增加，因此所得时延不会大于
+    任何合法联合分配的时延；多机不可能同时独占总带宽，故这不是可执行
+    资源方案。下界超过块预算即可证明不可行，下界未超时则不能证明可行。
+    训练取各分支总时间的最大值；聚合依次取上传最大值、固定聚合时间及
+    下发最大值，保持与执行器相同的同步规则。输入和输出时间单位均为秒。
+    """
+    uav, server, radio = config["uav"], config["server"], config["radio"]
+    noise = config["channel"]["noise_psd_w_hz"]
+    rows = []
+    for i, uid in enumerate(problem.uav_ids):
+        gain = problem.channel_gains[i]
+        if (problem.up_bits[i] or problem.down_bits[i]) and gain <= 0:
+            raise ValueError("活动链路信道增益为零，无法形成有限时延下界")
+        upload_rate = _rate(radio["total_up_hz"], uav["p_up_max_w"], gain, noise)
+        download_rate = _rate(radio["total_down_hz"], server["downlink_power_w"], gain, noise)
+        compute = problem.client_cycles[i] / uav["f_max_hz"]
+        suffix = problem.server_cycles[i] / server["frequency_hz"]
+        upload = problem.up_bits[i] / upload_rate if problem.up_bits[i] else 0.0
+        download = problem.down_bits[i] / download_rate if problem.down_bits[i] else 0.0
+        rows.append(dict(uav_id=uid, channel_gain=gain, client_compute_s=compute,
+                         server_compute_s=suffix, upload_s=upload, download_s=download,
+                         duration_s=compute + suffix + upload + download))
+    if problem.kind == "training":
+        limiting = max(rows, key=lambda row: row["duration_s"])
+        bound = limiting["duration_s"]
+        limiting_ids = [limiting["uav_id"]]
+    else:
+        up = max(rows, key=lambda row: row["upload_s"])
+        down = max(rows, key=lambda row: row["download_s"])
+        bound = up["upload_s"] + problem.aggregation_time_s + down["download_s"]
+        limiting_ids = sorted({up["uav_id"], down["uav_id"]})
+    return dict(method="independent_full_bandwidth_maximum_hardware",
+                lower_bound_s=bound, budget_s=problem.budget_s,
+                limiting_uav_ids=limiting_ids, per_uav=rows,
+                proves_feasible=False)
+
+
 def _capacity_expression(cp, bandwidth_mhz, power_w, gain_to_noise,
                          cone_scale=None, inverse_cone_scale=None):
     """Shannon 速率的精确相对熵表达，单位 Mbit/s，不使用速率线性近似。"""
@@ -508,6 +549,18 @@ def solve_block(problem, config, warm_start=None):
         diagnostics.update(variable_count=reduced.size, active_resource_count=reduced.resource_size,
                            variable_names=[str(v) for v in reduced.names],
                            time_scale_s=reduced.tscale, energy_scale_j=reduced.escale)
+        # 正的 Phase-I 松弛可能表示物理不可行，而非求解精度不足。先用
+        # 更乐观的独占全带宽下界检查，避免把真实深衰落误报为数值故障。
+        # 该检查不读取未来 CSI，不扩充预算，也不生成实际执行资源。
+        lower_bound = minimum_time_lower_bound(problem, config)
+        diagnostics["minimum_time_lower_bound_s"] = lower_bound["lower_bound_s"]
+        if ((lower_bound["lower_bound_s"] - problem.budget_s) / reduced.tscale
+                > feasibility_tol):
+            diagnostics.update(proven_infeasible=True, feasibility_lower_bound=lower_bound,
+                               block_budget_s=problem.budget_s)
+            return result("failed", "块时间预算物理不可行：最大硬件与独占全带宽下的时延下界"
+                          f" {lower_bound['lower_bound_s']:.6f}s 超过预算 {problem.budget_s:.6f}s；"
+                          f"限制 UAV 编号 {lower_bound['limiting_uav_ids']}")
         # 完全零负载时只保留聚合常数，不创建零维 CVXPY 变量。
         if reduced.size == 0:
             latest_resources = reduced.unpack(np.empty(0))

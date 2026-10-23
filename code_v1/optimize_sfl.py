@@ -81,7 +81,8 @@ def _print_failure(failure):
           f"committed_blocks={failure.get('committed_blocks', 0)}", flush=True)
     diagnostics = failure.get("diagnostics") or {}
     fields = ("iterations", "original_feasibility", "kkt_residual", "direction_residual",
-              "direction_norm", "recovery_slack", "last_solver_error")
+              "direction_norm", "recovery_slack", "proven_infeasible",
+              "minimum_time_lower_bound_s", "block_budget_s", "last_solver_error")
     values = [f"{key}={diagnostics[key]}" for key in fields if diagnostics.get(key) is not None]
     print("Solver diagnostics: " + ("; ".join(values) if values else "本失败点尚无求解残差，见失败原因"), flush=True)
 
