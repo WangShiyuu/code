@@ -1,0 +1,489 @@
+{
+  "schema_version": 1,
+  "kind": "fixed_split_reference_resource_training_diagnostic",
+  "created_at_utc": "2026-10-22T14:41:41.535129+00:00",
+  "config": {
+    "mission": {
+      "num_uavs": 5,
+      "duration_s": 600.0,
+      "x_min_m": -500.0,
+      "x_max_m": 500.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "altitude_m": 100.0,
+      "speed_m_s": 10.0,
+      "lane_spacing_m": 100.0,
+      "trace_interval_s": 0.1
+    },
+    "data": {
+      "root": "D:\\Wangshiyu\\Work1SFL\\DataSet\\CBCL StreetScenes",
+      "output": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\data",
+      "image_size": 64,
+      "val_fraction": 0.15,
+      "test_fraction": 0.15,
+      "seed": 42,
+      "samples_per_uav": null,
+      "initial_samples_per_uav": null,
+      "initial_fraction": 0.1,
+      "sample_rate_per_s": null
+    },
+    "training": {
+      "total_epochs": 100,
+      "aggregation_period": 2,
+      "epoch_step_size": 0.18,
+      "batch_size": 32,
+      "eval_batch_size": 64,
+      "optimizer": "sgd",
+      "momentum": 0.0,
+      "weight_decay": 0.0,
+      "scheduler": "constant",
+      "bn": "frozen",
+      "initialization_seed": 42,
+      "initialization_checkpoint": null,
+      "device": "auto",
+      "workers": 0,
+      "split_profile_path": null
+    },
+    "uav": {
+      "f_min_hz": 200000000.0,
+      "f_max_hz": 1500000000.0,
+      "f_ref_hz": 1000000000.0,
+      "kappa": 1e-28,
+      "cycles_per_flop": 0.5,
+      "p_up_min_w": 0.01,
+      "p_up_max_w": 1.0,
+      "p_up_ref_w": 0.5
+    },
+    "server": {
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "parallel_branches": null,
+      "frequency_hz": 3000000000.0,
+      "cycles_per_flop": 0.03,
+      "kappa": 1e-28,
+      "downlink_power_w": 2.0,
+      "max_downlink_power_w": null,
+      "aggregation_time_s": 0.01,
+      "aggregation_power_w": 10.0
+    },
+    "radio": {
+      "total_up_hz": 20000000.0,
+      "total_down_hz": 20000000.0,
+      "min_up_hz": 100000.0,
+      "min_down_hz": 100000.0
+    },
+    "channel": {
+      "seed": 42,
+      "carrier_hz": 2400000000.0,
+      "noise_psd_w_hz": 3.981e-21,
+      "los_a": 9.61,
+      "los_b": 0.16,
+      "los_loss_db": 1.0,
+      "nlos_loss_db": 20.0,
+      "rician_k": 10.0
+    },
+    "selection": {
+      "candidates": [
+        "P0",
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8"
+      ],
+      "initial_split": "P4",
+      "channel_window_size": 20,
+      "max_sweeps": 1,
+      "energy_tolerance_j": 1e-09
+    },
+    "energy": {
+      "initial_energy_j": null,
+      "flight_energy_j": null,
+      "fixed_energy_j": null,
+      "reserve_energy_j": null
+    },
+    "theory": {
+      "L": 1.0,
+      "G": 1.0,
+      "V": 0.02,
+      "rho": 0.002,
+      "delta": 0.1,
+      "epsilon": 0.05
+    },
+    "output": {
+      "scenario_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\scenario"
+    }
+  },
+  "run": {
+    "epochs": 2,
+    "aggregation_period": 2,
+    "aggregations": 1,
+    "split": "P4",
+    "device": "cpu",
+    "torch_version": "2.14.1+cpu",
+    "threads": 8,
+    "task_epoch_budget_enforced": false,
+    "energy_constraints_enforced": false,
+    "initialization": "统一完整模型，初始前缀在起飞前下发完成，本次不计下发开销",
+    "endpoint": "最终完整聚合模型保留于服务器，不再下发下一周期前缀",
+    "resource_policy": "固定参考频率/功率，上下行分别等分带宽，不执行优化",
+    "synchronization": "每批及聚合块末同步，飞行和采集持续进行"
+  },
+  "inputs": {
+    "manifest": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\data\\data.json",
+    "scenario": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\scenario",
+    "manifest_sha256": "2cec88a4570c61419a7b7cbfb63eb1da8b417c474ec3dc53d1881f6f3df88492",
+    "data_fingerprint": "f067c74c7d34f45440547b49f76610837b985b7ccbd4030835653461055c2ccd",
+    "csv_sha256": "15b2f0dacca5365f6631b8923e0240f89fdee9408d6bd7c6693e6d86bdd0fd7a",
+    "collection": {
+      "num_uavs": 5,
+      "max_samples_per_uav": 3873,
+      "initial_samples_per_uav": 387,
+      "rate_samples_per_s": 5.81,
+      "duration_s": 600.0
+    }
+  },
+  "split_profiles": {
+    "P0": {
+      "client_forward_flops_per_sample": 19267584.0,
+      "client_backward_flops_per_sample": 19267584.0,
+      "server_forward_flops_per_sample": 276833280.0,
+      "server_backward_flops_per_sample": 553666560.0,
+      "client_flops_per_sample": 38535168.0,
+      "server_flops_per_sample": 830499840.0,
+      "activation_bytes_per_sample": 65536,
+      "gradient_bytes_per_sample": 65536,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 38664,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P1": {
+      "client_forward_flops_per_sample": 57016320.0,
+      "client_backward_flops_per_sample": 94765056.0,
+      "server_forward_flops_per_sample": 239084544.0,
+      "server_backward_flops_per_sample": 478169088.0,
+      "client_flops_per_sample": 151781376.0,
+      "server_flops_per_sample": 717253632.0,
+      "activation_bytes_per_sample": 65536,
+      "gradient_bytes_per_sample": 65536,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 335640,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P2": {
+      "client_forward_flops_per_sample": 94765056.0,
+      "client_backward_flops_per_sample": 170262528.0,
+      "server_forward_flops_per_sample": 201335808.0,
+      "server_backward_flops_per_sample": 402671616.0,
+      "client_flops_per_sample": 265027584.0,
+      "server_flops_per_sample": 604007424.0,
+      "activation_bytes_per_sample": 65536,
+      "gradient_bytes_per_sample": 65536,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 632616,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P3": {
+      "client_forward_flops_per_sample": 124125184.0,
+      "client_backward_flops_per_sample": 228982784.0,
+      "server_forward_flops_per_sample": 171975680.0,
+      "server_backward_flops_per_sample": 343951360.0,
+      "client_flops_per_sample": 353107968.0,
+      "server_flops_per_sample": 515927040.0,
+      "activation_bytes_per_sample": 32768,
+      "gradient_bytes_per_sample": 32768,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 1556288,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P4": {
+      "client_forward_flops_per_sample": 161873920.0,
+      "client_backward_flops_per_sample": 304480256.0,
+      "server_forward_flops_per_sample": 134226944.0,
+      "server_backward_flops_per_sample": 268453888.0,
+      "client_flops_per_sample": 466354176.0,
+      "server_flops_per_sample": 402680832.0,
+      "activation_bytes_per_sample": 32768,
+      "gradient_bytes_per_sample": 32768,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 2740048,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P5": {
+      "client_forward_flops_per_sample": 191234048.0,
+      "client_backward_flops_per_sample": 363200512.0,
+      "server_forward_flops_per_sample": 104866816.0,
+      "server_backward_flops_per_sample": 209733632.0,
+      "client_flops_per_sample": 554434560.0,
+      "server_flops_per_sample": 314600448.0,
+      "activation_bytes_per_sample": 16384,
+      "gradient_bytes_per_sample": 16384,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 6422376,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P6": {
+      "client_forward_flops_per_sample": 228982784.0,
+      "client_backward_flops_per_sample": 438697984.0,
+      "server_forward_flops_per_sample": 67118080.0,
+      "server_backward_flops_per_sample": 134236160.0,
+      "client_flops_per_sample": 667680768.0,
+      "server_flops_per_sample": 201354240.0,
+      "activation_bytes_per_sample": 16384,
+      "gradient_bytes_per_sample": 16384,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 11149176,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P7": {
+      "client_forward_flops_per_sample": 258342912.0,
+      "client_backward_flops_per_sample": 497418240.0,
+      "server_forward_flops_per_sample": 37757952.0,
+      "server_backward_flops_per_sample": 75515904.0,
+      "client_flops_per_sample": 755761152.0,
+      "server_flops_per_sample": 113273856.0,
+      "activation_bytes_per_sample": 8192,
+      "gradient_bytes_per_sample": 8192,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 25853840,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    },
+    "P8": {
+      "client_forward_flops_per_sample": 296091648.0,
+      "client_backward_flops_per_sample": 572915712.0,
+      "server_forward_flops_per_sample": 9216.0,
+      "server_backward_flops_per_sample": 18432.0,
+      "client_flops_per_sample": 869007360.0,
+      "server_flops_per_sample": 27648.0,
+      "activation_bytes_per_sample": 8192,
+      "gradient_bytes_per_sample": 8192,
+      "label_bytes_per_sample": 8,
+      "prefix_state_bytes": 44744608,
+      "profile_batch_size": 4,
+      "image_size": 64,
+      "dtype": "float32",
+      "flop_count_scope": "PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。"
+    }
+  },
+  "epoch_records": [
+    {
+      "epoch": 1,
+      "start_s": 0.0,
+      "training_end_s": 99.09672971895547,
+      "samples_per_uav": 387,
+      "batches_per_uav": 13,
+      "tail_batch_samples": 3,
+      "mean_losses": [
+        1.9587194876461373,
+        2.0340340097437224,
+        1.9962701717396423,
+        1.9755504362342893,
+        2.0019456736493173
+      ],
+      "accuracies": [
+        0.21188630490956073,
+        0.1937984496124031,
+        0.19121447028423771,
+        0.2041343669250646,
+        0.21705426356589147
+      ],
+      "wall_training_s": 21.207338199950755,
+      "end_with_aggregation_s": 99.09672971895547
+    },
+    {
+      "epoch": 2,
+      "start_s": 99.09672971895547,
+      "training_end_s": 345.7892464791366,
+      "samples_per_uav": 962,
+      "batches_per_uav": 31,
+      "tail_batch_samples": 2,
+      "mean_losses": [
+        1.6822475123058485,
+        1.7692762774390143,
+        1.7038581559663006,
+        1.700119536780518,
+        1.7057861572987325
+      ],
+      "accuracies": [
+        0.38461538461538464,
+        0.3596673596673597,
+        0.39293139293139295,
+        0.3659043659043659,
+        0.3471933471933472
+      ],
+      "wall_training_s": 44.95585699984804,
+      "end_with_aggregation_s": 346.7196054816729
+    }
+  ],
+  "aggregation_records": [
+    {
+      "after_epoch": 2,
+      "start_s": 345.7892464791366,
+      "end_s": 346.7196054816729,
+      "validation": {
+        "samples": 256,
+        "mean_loss": 1.6044150292873383,
+        "accuracy": 0.44921875
+      }
+    }
+  ],
+  "validation_before": {
+    "samples": 256,
+    "mean_loss": 2.3806700110435486,
+    "accuracy": 0.1015625
+  },
+  "validation_after": {
+    "samples": 256,
+    "mean_loss": 1.6044150292873383,
+    "accuracy": 0.44921875
+  },
+  "validation_subset_sha256": "c8a867dbc45c66e44fa77192f051ff9dfaa5307e860ff6f48fceffef6e2125fc",
+  "parameter_change_l2": 0.32918159748966036,
+  "data_participation": {
+    "unique_trained_samples_per_uav": 962,
+    "sample_visits_per_uav": 1349,
+    "available_samples_per_uav_at_end": 2401,
+    "minimum_passes_required": null
+  },
+  "physical_execution": {
+    "simulated_elapsed_s": 346.7196054816729,
+    "training_blocks": 44,
+    "uavs": [
+      {
+        "uav_id": 0,
+        "compute_j": 31.455589171199968,
+        "transmit_j": 6.835353552556921,
+        "barrier_wait_s": 2.47417404613865,
+        "compute_s": 314.5558917119998,
+        "up_s": 13.670707105113841,
+        "down_s": 10.586668194739932,
+        "modeled_training_j": 38.290942723756885
+      },
+      {
+        "uav_id": 1,
+        "compute_j": 31.455589171199968,
+        "transmit_j": 5.438356813587897,
+        "barrier_wait_s": 7.28948831502445,
+        "compute_s": 314.5558917119998,
+        "up_s": 10.876713627175794,
+        "down_s": 8.56534740379217,
+        "modeled_training_j": 36.89394598478786
+      },
+      {
+        "uav_id": 2,
+        "compute_j": 31.455589171199968,
+        "transmit_j": 5.178193843814346,
+        "barrier_wait_s": 8.948719882261132,
+        "compute_s": 314.5558917119998,
+        "up_s": 10.356387687628692,
+        "down_s": 7.426441776102584,
+        "modeled_training_j": 36.633783015014316
+      },
+      {
+        "uav_id": 3,
+        "compute_j": 31.455589171199968,
+        "transmit_j": 5.680547572796776,
+        "barrier_wait_s": 7.200669090646109,
+        "compute_s": 314.5558917119998,
+        "up_s": 11.361095145593552,
+        "down_s": 8.169785109752766,
+        "modeled_training_j": 37.136136743996744
+      },
+      {
+        "uav_id": 4,
+        "compute_j": 31.455589171199968,
+        "transmit_j": 7.025838084014369,
+        "barrier_wait_s": 2.125226208565694,
+        "compute_s": 314.5558917119998,
+        "up_s": 14.051676168028738,
+        "down_s": 10.554646969397982,
+        "modeled_training_j": 38.481427255214335
+      }
+    ],
+    "server": {
+      "compute_j": 73.3342197196801,
+      "transmit_j": 90.60577890757087,
+      "aggregation_j": 0.1
+    },
+    "modeled_system_training_j": 351.4762343500211,
+    "communication": {
+      "activations_and_labels_up": {
+        "bytes": 221074120,
+        "transmissions": 220,
+        "csi_segments": 798,
+        "cross_boundary_transmissions": 213
+      },
+      "gradients_down": {
+        "bytes": 221020160,
+        "transmissions": 220,
+        "csi_segments": 672,
+        "cross_boundary_transmissions": 210
+      },
+      "prefix_state_up": {
+        "bytes": 13700240,
+        "transmissions": 5,
+        "csi_segments": 42,
+        "cross_boundary_transmissions": 5
+      },
+      "prefix_state_down": {
+        "bytes": 0,
+        "transmissions": 0,
+        "csi_segments": 0,
+        "cross_boundary_transmissions": 0
+      }
+    },
+    "excluded": [
+      "起飞前统一初始化下发",
+      "固定飞行及识别/采集/基础运行能量",
+      "尚未标定的接收、空闲、内存及数据处理功耗",
+      "无线协议开销与重传"
+    ],
+    "battery_feasibility": null,
+    "mission_deadline_enforced": false
+  },
+  "wall_timing": {
+    "training_loop_including_aggregation_evaluation_s": 66.55655209999532,
+    "summed_branch_compute_stages_s": {
+      "wall_client_forward_s": 4.617474303580821,
+      "wall_server_forward_backward_s": 28.8256616005674,
+      "wall_client_backward_and_update_s": 9.820092599838972
+    },
+    "total_before_report_write_s": 70.87051239982247
+  },
+  "interpretation": [
+    "验证结果仅用于观察一次短诊断，不构成总体损失的收敛证明",
+    "能耗来自 FLOP/周期/频率/电容参数，不是本机或真实 UAV 电能测量",
+    "模拟物理时延不含本机加载图片、画像和评价耗时；CSV 覆盖不足为输入数据问题",
+    "晚到且尚未进入 epoch 快照的样本不补训，不要求逐图训练次数"
+  ]
+}

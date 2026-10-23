@@ -1,0 +1,287 @@
+﻿分组,指标键,指标,对象,epoch,数值,单位,统计口径
+运行概况,created_at_utc,报告生成时间（UTC）,系统,,2026-10-22T14:41:41.535129+00:00,,summary 记录
+运行概况,epochs,实际完成训练 epoch,系统,,2,epoch,summary 记录
+运行概况,configured_total_epochs,配置的理论/任务训练轮数,系统,,100,epoch,summary 记录
+运行概况,aggregation_period,聚合间隔,系统,,2,epoch/次,summary 记录
+运行概况,aggregations,实际聚合次数,系统,,1,次,summary 记录
+运行概况,num_uavs,无人机数量,系统,,5,架,summary 记录
+运行概况,split,本次固定切点,系统,,P4,,summary 记录
+运行概况,batch_size,批大小上限,系统,,32,样本/批,summary 记录
+运行概况,device,本机训练执行设备,系统,,cpu,,summary 记录
+运行概况,training_blocks,模拟批同步块数,系统,,44,块,summary 记录
+运行概况,resource_policy,实际资源策略,系统,,固定参考频率/功率，上下行分别等分带宽，不执行优化,,summary 记录
+运行概况,synchronization,同步方式,系统,,每批及聚合块末同步，飞行和采集持续进行,,summary 记录
+运行概况,endpoint,最终模型位置及下发约定,系统,,最终完整聚合模型保留于服务器，不再下发下一周期前缀,,summary 记录
+实际资源与计算功率,total_up_hz,上行总带宽,系统,,20000000.0,Hz,每个方向独立的带宽预算
+实际资源与计算功率,total_down_hz,下行总带宽,系统,,20000000.0,Hz,每个方向独立的带宽预算
+实际资源与计算功率,frequency_hz,实际计算频率 f,UAV 0,,1000000000.0,Hz,固定参考资源：config.uav.f_ref_hz
+实际资源与计算功率,kappa,动态计算能耗系数 kappa,UAV 0,,1e-28,J/(cycle·Hz²),硬件能耗参数，不是理论收敛系数
+实际资源与计算功率,cycles_per_flop,FLOP 到周期的换算系数,UAV 0,,0.5,cycle/FLOP,配置的等效计算周期
+实际资源与计算功率,compute_power_w,计算有效功率,UAV 0,,0.09999999999999999,W,由 kappa*f³ 推导，仅在计算期间使用
+实际资源与计算功率,up_power_w,上行发射功率,UAV 0,,0.5,W,每机上行链路；与计算功率分别计量
+实际资源与计算功率,up_bandwidth_hz,实际上行带宽,UAV 0,,4000000.0,Hz,上行总带宽/N，未用份额不重分配
+实际资源与计算功率,down_bandwidth_hz,实际下行带宽,UAV 0,,4000000.0,Hz,下行总带宽/N，未用份额不重分配
+实际资源与计算功率,frequency_hz,实际计算频率 f,UAV 1,,1000000000.0,Hz,固定参考资源：config.uav.f_ref_hz
+实际资源与计算功率,kappa,动态计算能耗系数 kappa,UAV 1,,1e-28,J/(cycle·Hz²),硬件能耗参数，不是理论收敛系数
+实际资源与计算功率,cycles_per_flop,FLOP 到周期的换算系数,UAV 1,,0.5,cycle/FLOP,配置的等效计算周期
+实际资源与计算功率,compute_power_w,计算有效功率,UAV 1,,0.09999999999999999,W,由 kappa*f³ 推导，仅在计算期间使用
+实际资源与计算功率,up_power_w,上行发射功率,UAV 1,,0.5,W,每机上行链路；与计算功率分别计量
+实际资源与计算功率,up_bandwidth_hz,实际上行带宽,UAV 1,,4000000.0,Hz,上行总带宽/N，未用份额不重分配
+实际资源与计算功率,down_bandwidth_hz,实际下行带宽,UAV 1,,4000000.0,Hz,下行总带宽/N，未用份额不重分配
+实际资源与计算功率,frequency_hz,实际计算频率 f,UAV 2,,1000000000.0,Hz,固定参考资源：config.uav.f_ref_hz
+实际资源与计算功率,kappa,动态计算能耗系数 kappa,UAV 2,,1e-28,J/(cycle·Hz²),硬件能耗参数，不是理论收敛系数
+实际资源与计算功率,cycles_per_flop,FLOP 到周期的换算系数,UAV 2,,0.5,cycle/FLOP,配置的等效计算周期
+实际资源与计算功率,compute_power_w,计算有效功率,UAV 2,,0.09999999999999999,W,由 kappa*f³ 推导，仅在计算期间使用
+实际资源与计算功率,up_power_w,上行发射功率,UAV 2,,0.5,W,每机上行链路；与计算功率分别计量
+实际资源与计算功率,up_bandwidth_hz,实际上行带宽,UAV 2,,4000000.0,Hz,上行总带宽/N，未用份额不重分配
+实际资源与计算功率,down_bandwidth_hz,实际下行带宽,UAV 2,,4000000.0,Hz,下行总带宽/N，未用份额不重分配
+实际资源与计算功率,frequency_hz,实际计算频率 f,UAV 3,,1000000000.0,Hz,固定参考资源：config.uav.f_ref_hz
+实际资源与计算功率,kappa,动态计算能耗系数 kappa,UAV 3,,1e-28,J/(cycle·Hz²),硬件能耗参数，不是理论收敛系数
+实际资源与计算功率,cycles_per_flop,FLOP 到周期的换算系数,UAV 3,,0.5,cycle/FLOP,配置的等效计算周期
+实际资源与计算功率,compute_power_w,计算有效功率,UAV 3,,0.09999999999999999,W,由 kappa*f³ 推导，仅在计算期间使用
+实际资源与计算功率,up_power_w,上行发射功率,UAV 3,,0.5,W,每机上行链路；与计算功率分别计量
+实际资源与计算功率,up_bandwidth_hz,实际上行带宽,UAV 3,,4000000.0,Hz,上行总带宽/N，未用份额不重分配
+实际资源与计算功率,down_bandwidth_hz,实际下行带宽,UAV 3,,4000000.0,Hz,下行总带宽/N，未用份额不重分配
+实际资源与计算功率,frequency_hz,实际计算频率 f,UAV 4,,1000000000.0,Hz,固定参考资源：config.uav.f_ref_hz
+实际资源与计算功率,kappa,动态计算能耗系数 kappa,UAV 4,,1e-28,J/(cycle·Hz²),硬件能耗参数，不是理论收敛系数
+实际资源与计算功率,cycles_per_flop,FLOP 到周期的换算系数,UAV 4,,0.5,cycle/FLOP,配置的等效计算周期
+实际资源与计算功率,compute_power_w,计算有效功率,UAV 4,,0.09999999999999999,W,由 kappa*f³ 推导，仅在计算期间使用
+实际资源与计算功率,up_power_w,上行发射功率,UAV 4,,0.5,W,每机上行链路；与计算功率分别计量
+实际资源与计算功率,up_bandwidth_hz,实际上行带宽,UAV 4,,4000000.0,Hz,上行总带宽/N，未用份额不重分配
+实际资源与计算功率,down_bandwidth_hz,实际下行带宽,UAV 4,,4000000.0,Hz,下行总带宽/N，未用份额不重分配
+实际资源与计算功率,server_branches,服务器独立分支数,服务器,,5,分支,parallel_branches=None 时使用 N 个独立分支
+实际资源与计算功率,frequency_hz,每分支计算频率 f,服务器,,3000000000.0,Hz,各分支独立使用该频率，不将它按 N 均分
+实际资源与计算功率,kappa,每分支动态计算能耗系数 kappa,服务器,,1e-28,J/(cycle·Hz²),服务器硬件参数
+实际资源与计算功率,cycles_per_flop,FLOP 到周期的换算系数,服务器,,0.03,cycle/FLOP,服务器后缀等效周期
+实际资源与计算功率,compute_power_w,每分支计算有效功率,服务器,,2.7,W,由 kappa*f³ 推导，仅在该分支计算期间使用
+实际资源与计算功率,active_compute_power_w,N 个活跃分支同时计算功率,服务器,,13.5,W,N*kappa*f³；不含额外未使用的分支
+实际资源与计算功率,downlink_power_w,每条下行链路发射功率,服务器,,2.0,W/link,每链路发射功率，发射时长分别累计
+实际资源与计算功率,aggregation_time_s,每次聚合固定时延,服务器,,0.01,s/次,聚合开销与后缀计算分别记录
+实际资源与计算功率,aggregation_power_w,聚合计算功率,服务器,,10.0,W,只用于固定聚合阶段
+逐 epoch 快照与切点,snapshot_time_s,冻结样本快照时刻,系统,1,0.0,s,共同模拟物理时间
+逐 epoch 快照与切点,training_end_s,本 epoch 训练结束时刻,系统,1,99.09672971895547,s,不含本 epoch 之后的聚合
+逐 epoch 快照与切点,end_with_aggregation_s,包含聚合的结束时刻,系统,1,99.09672971895547,s,完成该 epoch 及适用的聚合后
+逐 epoch 快照与切点,split,实际切点,UAV 0,1,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 0,1,387,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 0,1,13,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 0,1,3,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 0,1,12,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 1,1,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 1,1,387,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 1,1,13,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 1,1,3,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 1,1,12,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 2,1,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 2,1,387,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 2,1,13,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 2,1,3,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 2,1,12,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 3,1,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 3,1,387,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 3,1,13,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 3,1,3,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 3,1,12,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 4,1,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 4,1,387,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 4,1,13,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 4,1,3,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 4,1,12,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,snapshot_time_s,冻结样本快照时刻,系统,2,99.09672971895547,s,共同模拟物理时间
+逐 epoch 快照与切点,training_end_s,本 epoch 训练结束时刻,系统,2,345.7892464791366,s,不含本 epoch 之后的聚合
+逐 epoch 快照与切点,end_with_aggregation_s,包含聚合的结束时刻,系统,2,346.7196054816729,s,完成该 epoch 及适用的聚合后
+逐 epoch 快照与切点,split,实际切点,UAV 0,2,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 0,2,962,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 0,2,31,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 0,2,2,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 0,2,30,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 1,2,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 1,2,962,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 1,2,31,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 1,2,2,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 1,2,30,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 2,2,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 2,2,962,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 2,2,31,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 2,2,2,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 2,2,30,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 3,2,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 3,2,962,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 3,2,31,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 3,2,2,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 3,2,30,批,floor(快照样本数/批大小上限)
+逐 epoch 快照与切点,split,实际切点,UAV 4,2,P4,,固定切分诊断，每机同一切点
+逐 epoch 快照与切点,snapshot_samples,冻结快照样本数,UAV 4,2,962,样本,本 epoch 完整遍历快照；包含保留的旧样本
+逐 epoch 快照与切点,batches,实际批次数,UAV 4,2,31,批,含最后一个批次，drop_last=False
+逐 epoch 快照与切点,tail_samples,最后一批样本数,UAV 4,2,2,样本,可能等于批大小上限，此时没有不满批
+逐 epoch 快照与切点,full_batches,满批数,UAV 4,2,30,批,floor(快照样本数/批大小上限)
+逐 epoch 时延与能量,uav_compute_s,关键路径 UAV 前缀计算,系统,1,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,server_compute_s,关键路径服务器后缀计算,系统,1,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,communication_s,关键路径通信,系统,1,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,aggregation_s,关键路径聚合,系统,1,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,uav_compute_j,所有 UAV 前缀计算能量,系统,1,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,uav_transmit_j,所有 UAV 上行发射能量,系统,1,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,server_compute_j,服务器后缀计算能量,系统,1,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,server_transmit_j,服务器下行发射能量,系统,1,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,aggregation_j,服务器聚合计算能量,系统,1,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,modeled_system_training_j,系统已建模训练总能量,系统,1,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,uav_compute_s,关键路径 UAV 前缀计算,系统,2,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,server_compute_s,关键路径服务器后缀计算,系统,2,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,communication_s,关键路径通信,系统,2,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,aggregation_s,关键路径聚合,系统,2,未记录,s,本 epoch 执行台账增量，包含适用的聚合；旧版未保存则不推算
+逐 epoch 时延与能量,uav_compute_j,所有 UAV 前缀计算能量,系统,2,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,uav_transmit_j,所有 UAV 上行发射能量,系统,2,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,server_compute_j,服务器后缀计算能量,系统,2,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,server_transmit_j,服务器下行发射能量,系统,2,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,aggregation_j,服务器聚合计算能量,系统,2,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+逐 epoch 时延与能量,modeled_system_training_j,系统已建模训练总能量,系统,2,未记录,J,本 epoch 前后累计能量之差，包含适用的聚合；各并行分支能量相加
+样本参与统计,max_samples_per_uav,每机采集容量,每机,,3873,样本,固定、互不重复的每机采集序列容量
+样本参与统计,initial_samples_per_uav,每机初始缓存,每机,,387,样本,已计入采集容量
+样本参与统计,rate_samples_per_s,每机持续采集速率,每机,,5.81,样本/s,训练、通信和等待期间均继续采集
+样本参与统计,unique_trained_samples_per_uav,参与训练的不同样本,每机,,962,样本,累计前缀保留，取最后已训练快照；不按 epoch 重复计数
+样本参与统计,system_unique_trained_samples_per_uav,系统参与训练的不同样本,系统,,4810,样本,累计前缀保留，取最后已训练快照；不按 epoch 重复计数；各机使用不同训练索引，按 N 架求和
+样本参与统计,sample_visits_per_uav,训练样本访问次数,每机,,1349,样本次,所有 epoch 快照样本数之和；旧样本再次训练再次计数
+样本参与统计,system_sample_visits_per_uav,系统训练样本访问次数,系统,,6745,样本次,所有 epoch 快照样本数之和；旧样本再次训练再次计数；各机使用不同训练索引，按 N 架求和
+样本参与统计,available_samples_per_uav_at_end,结束时已采集样本,每机,,2401,样本,包括晚到且尚未进入 epoch 快照的样本
+样本参与统计,system_available_samples_per_uav_at_end,系统结束时已采集样本,系统,,12005,样本,包括晚到且尚未进入 epoch 快照的样本；各机使用不同训练索引，按 N 架求和
+切分画像与通信载荷,client_flops_per_sample,每样本前缀计算量,P4,,466354176.0,FLOP/样本,包括前向与反向；按画像约定计数
+切分画像与通信载荷,server_flops_per_sample,每样本后缀计算量,P4,,402680832.0,FLOP/样本,包括前向与反向；每个独立服务器分支
+切分画像与通信载荷,activation_bytes_per_sample,每样本激活,P4,,32768,B/样本,上行激活，不含标签
+切分画像与通信载荷,label_bytes_per_sample,每样本标签,P4,,8,B/样本,随激活上行
+切分画像与通信载荷,gradient_bytes_per_sample,每样本边界梯度,P4,,32768,B/样本,服务器向 UAV 下行
+切分画像与通信载荷,prefix_state_bytes,一次单机前缀状态,P4,,2740048,B/次,含参数及 BN buffers，聚合时上传
+切分画像与通信载荷,flop_count_scope,FLOP 计数范围,系统,,PyTorch FlopCounterMode 支持的算子；矩阵乘法/卷积按乘法与加法分别计数。未计优化器更新、数据读取、内存搬运、通信与 Python 开销；BN、激活、池化及损失等未被当前计数器覆盖的算子也可能漏计。计算时延和能耗须结合配置中的硬件参数估计，不能视为实测设备指标。,,沿用离线画像记录
+切分画像与通信载荷,activations_and_labels_up_full_batch_bytes,满批激活与标签上行,每机,,1048832,B/批,每机、按实际样本数线性缩放
+切分画像与通信载荷,activations_and_labels_up_sample_visits_bytes,训练批累计激活与标签上行,UAV 0,,44214824,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,activations_and_labels_up_sample_visits_bytes,训练批累计激活与标签上行,UAV 1,,44214824,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,activations_and_labels_up_sample_visits_bytes,训练批累计激活与标签上行,UAV 2,,44214824,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,activations_and_labels_up_sample_visits_bytes,训练批累计激活与标签上行,UAV 3,,44214824,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,activations_and_labels_up_sample_visits_bytes,训练批累计激活与标签上行,UAV 4,,44214824,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 0,1,98328,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 0,1,12684312,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 1,1,98328,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 1,1,12684312,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 2,1,98328,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 2,1,12684312,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 3,1,98328,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 3,1,12684312,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 4,1,98328,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 4,1,12684312,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 0,2,65552,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 0,2,31530512,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 1,2,65552,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 1,2,31530512,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 2,2,65552,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 2,2,31530512,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 3,2,65552,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 3,2,31530512,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_tail_bytes,最后一批激活与标签上行,UAV 4,2,65552,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,activations_and_labels_up_epoch_bytes,本 epoch 累计激活与标签上行,UAV 4,2,31530512,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_full_batch_bytes,满批梯度下行,每机,,1048576,B/批,每机、按实际样本数线性缩放
+切分画像与通信载荷,gradients_down_sample_visits_bytes,训练批累计梯度下行,UAV 0,,44204032,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,gradients_down_sample_visits_bytes,训练批累计梯度下行,UAV 1,,44204032,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,gradients_down_sample_visits_bytes,训练批累计梯度下行,UAV 2,,44204032,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,gradients_down_sample_visits_bytes,训练批累计梯度下行,UAV 3,,44204032,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,gradients_down_sample_visits_bytes,训练批累计梯度下行,UAV 4,,44204032,B,每样本载荷×本机样本访问次数，不含聚合状态
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 0,1,98304,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 0,1,12681216,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 1,1,98304,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 1,1,12681216,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 2,1,98304,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 2,1,12681216,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 3,1,98304,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 3,1,12681216,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 4,1,98304,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 4,1,12681216,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 0,2,65536,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 0,2,31522816,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 1,2,65536,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 1,2,31522816,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 2,2,65536,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 2,2,31522816,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 3,2,65536,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 3,2,31522816,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,gradients_down_tail_bytes,最后一批梯度下行,UAV 4,2,65536,B/批,每机、使用尾批实际样本数
+切分画像与通信载荷,gradients_down_epoch_bytes,本 epoch 累计梯度下行,UAV 4,2,31522816,B,每样本载荷×本 epoch 冻结快照样本数
+切分画像与通信载荷,activations_and_labels_up_bytes,激活与标签上行载荷总量,系统,,221074120,B,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,activations_and_labels_up_transmissions,激活与标签上行传输次数,系统,,220,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,activations_and_labels_up_csi_segments,激活与标签上行累计 CSI 分段数,系统,,798,段,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,activations_and_labels_up_cross_boundary_transmissions,激活与标签上行跨 CSI 边界传输数,系统,,213,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,gradients_down_bytes,边界梯度下行载荷总量,系统,,221020160,B,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,gradients_down_transmissions,边界梯度下行传输次数,系统,,220,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,gradients_down_csi_segments,边界梯度下行累计 CSI 分段数,系统,,672,段,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,gradients_down_cross_boundary_transmissions,边界梯度下行跨 CSI 边界传输数,系统,,210,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_up_bytes,聚合前缀状态上传载荷总量,系统,,13700240,B,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_up_transmissions,聚合前缀状态上传传输次数,系统,,5,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_up_csi_segments,聚合前缀状态上传累计 CSI 分段数,系统,,42,段,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_up_cross_boundary_transmissions,聚合前缀状态上传跨 CSI 边界传输数,系统,,5,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_down_bytes,聚合前缀状态下发载荷总量,系统,,0,B,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_down_transmissions,聚合前缀状态下发传输次数,系统,,0,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_down_csi_segments,聚合前缀状态下发累计 CSI 分段数,系统,,0,段,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,prefix_state_down_cross_boundary_transmissions,聚合前缀状态下发跨 CSI 边界传输数,系统,,0,次,所有 UAV、所有批/聚合累加；纯张量载荷，不含协议开销
+切分画像与通信载荷,total_payload_bytes,通信载荷总量,系统,,455794520,B,四类实际通信载荷求和，上下行分别发送均计入
+每机实际计量,compute_s,前缀计算工作时长,UAV 0,,314.5558917119998,s,本机各批前向/反向时间累加，不是系统墙钟时长
+每机实际计量,up_s,上行发送工作时长,UAV 0,,13.670707105113841,s,本机激活/标签及前缀状态上传时长累加
+每机实际计量,down_s,下行传输工作时长,UAV 0,,10.586668194739932,s,本机链路接收梯度及适用的前缀下发时长；接收能量未标定
+每机实际计量,barrier_wait_s,同步等待时长,UAV 0,,2.47417404613865,s,批/通信块末屏障等待，含服务器聚合等待；不含后缀计算期间的协议依赖
+每机实际计量,compute_j,前缀计算能量,UAV 0,,31.455589171199968,J,kappa*C*f² 的模型估计；C 为累计等效周期
+每机实际计量,transmit_j,上行发射能量,UAV 0,,6.835353552556921,J,只计本机发射功率×上行发送时长
+每机实际计量,modeled_training_j,已建模训练总能量,UAV 0,,38.290942723756885,J,前缀计算+上行发射；未含未知的接收/空闲等能量
+每机实际计量,compute_energy_over_time_w,计算能量/计算时长,UAV 0,,0.09999999999999996,W,交叉核对 kappa*f³；不是除以系统模拟时长的平均功率
+每机实际计量,compute_s,前缀计算工作时长,UAV 1,,314.5558917119998,s,本机各批前向/反向时间累加，不是系统墙钟时长
+每机实际计量,up_s,上行发送工作时长,UAV 1,,10.876713627175794,s,本机激活/标签及前缀状态上传时长累加
+每机实际计量,down_s,下行传输工作时长,UAV 1,,8.56534740379217,s,本机链路接收梯度及适用的前缀下发时长；接收能量未标定
+每机实际计量,barrier_wait_s,同步等待时长,UAV 1,,7.28948831502445,s,批/通信块末屏障等待，含服务器聚合等待；不含后缀计算期间的协议依赖
+每机实际计量,compute_j,前缀计算能量,UAV 1,,31.455589171199968,J,kappa*C*f² 的模型估计；C 为累计等效周期
+每机实际计量,transmit_j,上行发射能量,UAV 1,,5.438356813587897,J,只计本机发射功率×上行发送时长
+每机实际计量,modeled_training_j,已建模训练总能量,UAV 1,,36.89394598478786,J,前缀计算+上行发射；未含未知的接收/空闲等能量
+每机实际计量,compute_energy_over_time_w,计算能量/计算时长,UAV 1,,0.09999999999999996,W,交叉核对 kappa*f³；不是除以系统模拟时长的平均功率
+每机实际计量,compute_s,前缀计算工作时长,UAV 2,,314.5558917119998,s,本机各批前向/反向时间累加，不是系统墙钟时长
+每机实际计量,up_s,上行发送工作时长,UAV 2,,10.356387687628692,s,本机激活/标签及前缀状态上传时长累加
+每机实际计量,down_s,下行传输工作时长,UAV 2,,7.426441776102584,s,本机链路接收梯度及适用的前缀下发时长；接收能量未标定
+每机实际计量,barrier_wait_s,同步等待时长,UAV 2,,8.948719882261132,s,批/通信块末屏障等待，含服务器聚合等待；不含后缀计算期间的协议依赖
+每机实际计量,compute_j,前缀计算能量,UAV 2,,31.455589171199968,J,kappa*C*f² 的模型估计；C 为累计等效周期
+每机实际计量,transmit_j,上行发射能量,UAV 2,,5.178193843814346,J,只计本机发射功率×上行发送时长
+每机实际计量,modeled_training_j,已建模训练总能量,UAV 2,,36.633783015014316,J,前缀计算+上行发射；未含未知的接收/空闲等能量
+每机实际计量,compute_energy_over_time_w,计算能量/计算时长,UAV 2,,0.09999999999999996,W,交叉核对 kappa*f³；不是除以系统模拟时长的平均功率
+每机实际计量,compute_s,前缀计算工作时长,UAV 3,,314.5558917119998,s,本机各批前向/反向时间累加，不是系统墙钟时长
+每机实际计量,up_s,上行发送工作时长,UAV 3,,11.361095145593552,s,本机激活/标签及前缀状态上传时长累加
+每机实际计量,down_s,下行传输工作时长,UAV 3,,8.169785109752766,s,本机链路接收梯度及适用的前缀下发时长；接收能量未标定
+每机实际计量,barrier_wait_s,同步等待时长,UAV 3,,7.200669090646109,s,批/通信块末屏障等待，含服务器聚合等待；不含后缀计算期间的协议依赖
+每机实际计量,compute_j,前缀计算能量,UAV 3,,31.455589171199968,J,kappa*C*f² 的模型估计；C 为累计等效周期
+每机实际计量,transmit_j,上行发射能量,UAV 3,,5.680547572796776,J,只计本机发射功率×上行发送时长
+每机实际计量,modeled_training_j,已建模训练总能量,UAV 3,,37.136136743996744,J,前缀计算+上行发射；未含未知的接收/空闲等能量
+每机实际计量,compute_energy_over_time_w,计算能量/计算时长,UAV 3,,0.09999999999999996,W,交叉核对 kappa*f³；不是除以系统模拟时长的平均功率
+每机实际计量,compute_s,前缀计算工作时长,UAV 4,,314.5558917119998,s,本机各批前向/反向时间累加，不是系统墙钟时长
+每机实际计量,up_s,上行发送工作时长,UAV 4,,14.051676168028738,s,本机激活/标签及前缀状态上传时长累加
+每机实际计量,down_s,下行传输工作时长,UAV 4,,10.554646969397982,s,本机链路接收梯度及适用的前缀下发时长；接收能量未标定
+每机实际计量,barrier_wait_s,同步等待时长,UAV 4,,2.125226208565694,s,批/通信块末屏障等待，含服务器聚合等待；不含后缀计算期间的协议依赖
+每机实际计量,compute_j,前缀计算能量,UAV 4,,31.455589171199968,J,kappa*C*f² 的模型估计；C 为累计等效周期
+每机实际计量,transmit_j,上行发射能量,UAV 4,,7.025838084014369,J,只计本机发射功率×上行发送时长
+每机实际计量,modeled_training_j,已建模训练总能量,UAV 4,,38.481427255214335,J,前缀计算+上行发射；未含未知的接收/空闲等能量
+每机实际计量,compute_energy_over_time_w,计算能量/计算时长,UAV 4,,0.09999999999999996,W,交叉核对 kappa*f³；不是除以系统模拟时长的平均功率
+服务器与系统总量,server_compute_j,后缀计算能量,服务器,,73.3342197196801,J,所有独立分支能量相加
+服务器与系统总量,server_transmit_j,下行发射能量,服务器,,90.60577890757087,J,所有下行链路 p_down×发送时长相加
+服务器与系统总量,server_aggregation_j,聚合计算能量,服务器,,0.1,J,聚合次数×固定聚合时延×聚合功率
+服务器与系统总量,server_total_j,服务器已建模总能量,服务器,,164.03999862725098,J,后缀计算+下行发射+聚合
+服务器与系统总量,all_uavs_compute_j,所有 UAV 前缀计算能量,系统,,157.27794585599983,J,各机计算能量之和
+服务器与系统总量,all_uavs_transmit_j,所有 UAV 上行发射能量,系统,,30.15828986677031,J,各机上行发射能量之和
+服务器与系统总量,all_uavs_compute_s,所有 UAV 计算工作量时长,系统,,1572.7794585599988,设备·s,各机计算时长之和；不能当作并行系统时延
+服务器与系统总量,simulated_elapsed_s,系统模拟总时延,系统,,346.7196054816729,s,并行独立分支、每批同步；取最慢完成时间推进物理时钟
+服务器与系统总量,modeled_system_training_j,系统已建模训练总能量,系统,,351.4762343500211,J,各 UAV 计算/发射+服务器计算/下行发射/聚合
+服务器与系统总量,all_compute_j,系统前后缀计算能量,系统,,230.61216557567994,J,按设备台账直接求和，聚合能量单列
+服务器与系统总量,all_transmit_j,系统通信发射能量,系统,,120.76406877434118,J,按设备台账直接求和，聚合能量单列
+并行关键路径时延分解,uav_compute_s,关键路径 UAV 前缀计算,系统,,未记录,s,由模拟执行时记录；各同步块仅取关键分支，不累加并行分支时长
+并行关键路径时延分解,server_compute_s,关键路径服务器后缀计算,系统,,未记录,s,由模拟执行时记录；各同步块仅取关键分支，不累加并行分支时长
+并行关键路径时延分解,communication_s,关键路径通信,系统,,未记录,s,由模拟执行时记录；各同步块仅取关键分支，不累加并行分支时长
+并行关键路径时延分解,aggregation_s,关键路径聚合,系统,,未记录,s,由模拟执行时记录；各同步块仅取关键分支，不累加并行分支时长
+并行关键路径时延分解,critical_path_sum_s,关键路径四项之和,系统,,未记录,s,应等于系统模拟总时延；旧版无 critical_path 时不推算
+并行关键路径时延分解,critical_path_minus_elapsed_s,关键路径合计减系统总时延,系统,,未记录,s,允许浮点舍入级差异；缺少任何分项则显示未记录
+本机墙钟与训练验证,training_loop_including_aggregation_evaluation_s,本机训练循环墙钟（含聚合评价）,系统,,66.55655209999532,s,本机真实执行计时，与模拟物理时延分开
+本机墙钟与训练验证,total_before_report_write_s,本机执行墙钟（报告写出前）,系统,,70.87051239982247,s,本机真实执行计时，与模拟物理时延分开
+本机墙钟与训练验证,parameter_change_l2,模型参数变化 L2,系统,,0.32918159748966036,,最终聚合模型与统一初始化参数之差
+本机墙钟与训练验证,validation_before_mean_loss,训练前验证平均损失,系统,,2.3806700110435486,,同一固定验证子集；准确率为 0 到 1 的比例
+本机墙钟与训练验证,validation_before_accuracy,训练前验证准确率,系统,,0.1015625,,同一固定验证子集；准确率为 0 到 1 的比例
+本机墙钟与训练验证,validation_before_samples,训练前验证样本数,系统,,256,样本,同一固定验证子集；准确率为 0 到 1 的比例
+本机墙钟与训练验证,validation_after_mean_loss,训练后验证平均损失,系统,,1.6044150292873383,,同一固定验证子集；准确率为 0 到 1 的比例
+本机墙钟与训练验证,validation_after_accuracy,训练后验证准确率,系统,,0.44921875,,同一固定验证子集；准确率为 0 到 1 的比例
+本机墙钟与训练验证,validation_after_samples,训练后验证样本数,系统,,256,样本,同一固定验证子集；准确率为 0 到 1 的比例
