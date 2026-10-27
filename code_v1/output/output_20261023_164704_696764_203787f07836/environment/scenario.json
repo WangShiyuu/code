@@ -1,0 +1,860 @@
+{
+  "schema_version": 2,
+  "config": {
+    "mission": {
+      "num_uavs": 5,
+      "duration_s": 137390.6,
+      "x_min_m": -500.0,
+      "x_max_m": 500.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "altitude_m": 100.0,
+      "speed_m_s": 10.0,
+      "lane_spacing_m": 100.0,
+      "trace_interval_s": 0.1
+    },
+    "data": {
+      "root": "D:\\Wangshiyu\\Work1SFL\\DataSet\\CBCL StreetScenes",
+      "output": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\data",
+      "image_size": 64,
+      "val_fraction": 0.15,
+      "test_fraction": 0.15,
+      "seed": 42,
+      "samples_per_uav": null,
+      "initial_samples_per_uav": null,
+      "initial_fraction": 0.1,
+      "sample_rate_per_s": 5.81
+    },
+    "training": {
+      "total_epochs": 100,
+      "aggregation_period": 2,
+      "epoch_step_size": 0.18,
+      "batch_size": 32,
+      "eval_batch_size": 64,
+      "optimizer": "sgd",
+      "momentum": 0.0,
+      "weight_decay": 0.0,
+      "scheduler": "constant",
+      "bn": "frozen",
+      "initialization_seed": 42,
+      "initialization_checkpoint": null,
+      "device": "auto",
+      "workers": 0,
+      "split_profile_path": null
+    },
+    "uav": {
+      "f_min_hz": 200000000.0,
+      "f_max_hz": 1500000000.0,
+      "f_ref_hz": 1000000000.0,
+      "kappa": 1e-28,
+      "cycles_per_flop": 0.5,
+      "p_up_min_w": 0.01,
+      "p_up_max_w": 1.0,
+      "p_up_ref_w": 0.5
+    },
+    "server": {
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "parallel_branches": null,
+      "frequency_hz": 3000000000.0,
+      "cycles_per_flop": 0.03,
+      "kappa": 1e-28,
+      "downlink_power_w": 2.0,
+      "max_downlink_power_w": null,
+      "aggregation_time_s": 0.01,
+      "aggregation_power_w": 10.0
+    },
+    "radio": {
+      "total_up_hz": 20000000.0,
+      "total_down_hz": 20000000.0,
+      "min_up_hz": 100000.0,
+      "min_down_hz": 100000.0
+    },
+    "channel": {
+      "seed": 42,
+      "carrier_hz": 2400000000.0,
+      "noise_psd_w_hz": 3.981e-21,
+      "los_a": 9.61,
+      "los_b": 0.16,
+      "los_loss_db": 1.0,
+      "nlos_loss_db": 20.0,
+      "rician_k": 10.0
+    },
+    "selection": {
+      "candidates": [
+        "P0",
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8"
+      ],
+      "initial_split": "P4",
+      "channel_window_size": 20,
+      "max_sweeps": 1,
+      "energy_tolerance_j": 1e-09
+    },
+    "optimization": {
+      "deadline_factor": 1.2,
+      "calibration_seed": null,
+      "max_part_bytes": 20000000,
+      "proximal_coefficient": 0.01,
+      "backtracking_ratio": 0.5,
+      "armijo_coefficient": 0.0001,
+      "max_iterations": 100,
+      "max_backtracks": 30,
+      "direction_tolerance": 1e-05,
+      "feasibility_tolerance": 1e-06,
+      "kkt_tolerance": 0.0001
+    },
+    "energy": {
+      "initial_energy_j": null,
+      "flight_energy_j": null,
+      "fixed_energy_j": null,
+      "reserve_energy_j": null
+    },
+    "theory": {
+      "L": 1.0,
+      "G": 1.0,
+      "V": 0.02,
+      "rho": 0.002,
+      "delta": 0.1,
+      "epsilon": 0.05
+    },
+    "output": {
+      "scenario_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\scenario"
+    }
+  },
+  "collection": {
+    "num_uavs": 5,
+    "max_samples_per_uav": 3873,
+    "initial_samples_per_uav": 387,
+    "rate_samples_per_s": 5.81,
+    "duration_s": 137390.6
+  },
+  "source_mission_duration_s": 600.0,
+  "resolved_hardware": {
+    "server": {
+      "parallel_branches": 5,
+      "max_downlink_power_w": 10.0
+    }
+  },
+  "uav_ids": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "trajectories": [
+    {
+      "uav_id": 0,
+      "x_min_m": -500.0,
+      "x_max_m": -300.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "lane_count": 2,
+      "waypoints_m": [
+        [
+          -450.0,
+          -500.0,
+          100.0
+        ],
+        [
+          -450.0,
+          500.0,
+          100.0
+        ],
+        [
+          -350.0,
+          500.0,
+          100.0
+        ],
+        [
+          -350.0,
+          -500.0,
+          100.0
+        ],
+        [
+          -450.0,
+          -500.0,
+          100.0
+        ]
+      ],
+      "cumulative_distance_m": [
+        0.0,
+        1000.0,
+        1100.0,
+        2100.0,
+        2200.0
+      ],
+      "waypoint_times_s": [
+        0.0,
+        100.0,
+        110.0,
+        210.0,
+        220.0
+      ],
+      "loop_length_m": 2200.0,
+      "loop_time_s": 220.0,
+      "completed_loops": 624,
+      "mission_distance_m": 1373906.0,
+      "speed_m_s": 10.0
+    },
+    {
+      "uav_id": 1,
+      "x_min_m": -300.0,
+      "x_max_m": -100.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "lane_count": 2,
+      "waypoints_m": [
+        [
+          -250.0,
+          -500.0,
+          100.0
+        ],
+        [
+          -250.0,
+          500.0,
+          100.0
+        ],
+        [
+          -150.0,
+          500.0,
+          100.0
+        ],
+        [
+          -150.0,
+          -500.0,
+          100.0
+        ],
+        [
+          -250.0,
+          -500.0,
+          100.0
+        ]
+      ],
+      "cumulative_distance_m": [
+        0.0,
+        1000.0,
+        1100.0,
+        2100.0,
+        2200.0
+      ],
+      "waypoint_times_s": [
+        0.0,
+        100.0,
+        110.0,
+        210.0,
+        220.0
+      ],
+      "loop_length_m": 2200.0,
+      "loop_time_s": 220.0,
+      "completed_loops": 624,
+      "mission_distance_m": 1373906.0,
+      "speed_m_s": 10.0
+    },
+    {
+      "uav_id": 2,
+      "x_min_m": -100.0,
+      "x_max_m": 100.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "lane_count": 2,
+      "waypoints_m": [
+        [
+          -50.0,
+          -500.0,
+          100.0
+        ],
+        [
+          -50.0,
+          500.0,
+          100.0
+        ],
+        [
+          50.0,
+          500.0,
+          100.0
+        ],
+        [
+          50.0,
+          -500.0,
+          100.0
+        ],
+        [
+          -50.0,
+          -500.0,
+          100.0
+        ]
+      ],
+      "cumulative_distance_m": [
+        0.0,
+        1000.0,
+        1100.0,
+        2100.0,
+        2200.0
+      ],
+      "waypoint_times_s": [
+        0.0,
+        100.0,
+        110.0,
+        210.0,
+        220.0
+      ],
+      "loop_length_m": 2200.0,
+      "loop_time_s": 220.0,
+      "completed_loops": 624,
+      "mission_distance_m": 1373906.0,
+      "speed_m_s": 10.0
+    },
+    {
+      "uav_id": 3,
+      "x_min_m": 100.0,
+      "x_max_m": 300.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "lane_count": 2,
+      "waypoints_m": [
+        [
+          150.0,
+          -500.0,
+          100.0
+        ],
+        [
+          150.0,
+          500.0,
+          100.0
+        ],
+        [
+          250.0,
+          500.0,
+          100.0
+        ],
+        [
+          250.0,
+          -500.0,
+          100.0
+        ],
+        [
+          150.0,
+          -500.0,
+          100.0
+        ]
+      ],
+      "cumulative_distance_m": [
+        0.0,
+        1000.0,
+        1100.0,
+        2100.0,
+        2200.0
+      ],
+      "waypoint_times_s": [
+        0.0,
+        100.0,
+        110.0,
+        210.0,
+        220.0
+      ],
+      "loop_length_m": 2200.0,
+      "loop_time_s": 220.0,
+      "completed_loops": 624,
+      "mission_distance_m": 1373906.0,
+      "speed_m_s": 10.0
+    },
+    {
+      "uav_id": 4,
+      "x_min_m": 300.0,
+      "x_max_m": 500.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "lane_count": 2,
+      "waypoints_m": [
+        [
+          350.0,
+          -500.0,
+          100.0
+        ],
+        [
+          350.0,
+          500.0,
+          100.0
+        ],
+        [
+          450.0,
+          500.0,
+          100.0
+        ],
+        [
+          450.0,
+          -500.0,
+          100.0
+        ],
+        [
+          350.0,
+          -500.0,
+          100.0
+        ]
+      ],
+      "cumulative_distance_m": [
+        0.0,
+        1000.0,
+        1100.0,
+        2100.0,
+        2200.0
+      ],
+      "waypoint_times_s": [
+        0.0,
+        100.0,
+        110.0,
+        210.0,
+        220.0
+      ],
+      "loop_length_m": 2200.0,
+      "loop_time_s": 220.0,
+      "completed_loops": 624,
+      "mission_distance_m": 1373906.0,
+      "speed_m_s": 10.0
+    }
+  ],
+  "manifest_path": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\data\\data.json",
+  "manifest_sha256": "2cec88a4570c61419a7b7cbfb63eb1da8b417c474ec3dc53d1881f6f3df88492",
+  "data_fingerprint": "f067c74c7d34f45440547b49f76610837b985b7ccbd4030835653461055c2ccd",
+  "trace": {
+    "format": "chunked_csv",
+    "csv": "environment_00000.csv",
+    "parts": [
+      {
+        "file": "environment_00000.csv",
+        "start_time_s": 0.0,
+        "end_time_s": 3436.7000000000003,
+        "start_observation": 0,
+        "observation_count": 34368,
+        "row_count": 171840,
+        "bytes": 19999735,
+        "sha256": "332c657f8e83cb048048d7da33b972bca4efaf1316db597c79e1bdefc26c9fbb"
+      },
+      {
+        "file": "environment_00001.csv",
+        "start_time_s": 3436.8,
+        "end_time_s": 6874.5,
+        "start_observation": 34368,
+        "observation_count": 34378,
+        "row_count": 171890,
+        "bytes": 19999478,
+        "sha256": "71558d17e627ebfe427c092f701bfa18d438ea3ac2a2e81d27fb8ce8631c790c"
+      },
+      {
+        "file": "environment_00002.csv",
+        "start_time_s": 6874.6,
+        "end_time_s": 10356.800000000001,
+        "start_observation": 68746,
+        "observation_count": 34823,
+        "row_count": 174115,
+        "bytes": 19999966,
+        "sha256": "2c6349f259aa4cbe8712a8695f5676b5f5f383effa649e41a150f86f37d780e3"
+      },
+      {
+        "file": "environment_00003.csv",
+        "start_time_s": 10356.900000000001,
+        "end_time_s": 13716.400000000001,
+        "start_observation": 103569,
+        "observation_count": 33596,
+        "row_count": 167980,
+        "bytes": 19999583,
+        "sha256": "4b575f4bfe2ef93a926b0867c942cf55aedd4b1aa25a9267bc3e81647814966f"
+      },
+      {
+        "file": "environment_00004.csv",
+        "start_time_s": 13716.5,
+        "end_time_s": 17199.0,
+        "start_observation": 137165,
+        "observation_count": 34826,
+        "row_count": 174130,
+        "bytes": 19999558,
+        "sha256": "e316533cc8ddd2a21512292c0bf37926c3c6a1a17b32978fa90871023bd69a45"
+      },
+      {
+        "file": "environment_00005.csv",
+        "start_time_s": 17199.100000000002,
+        "end_time_s": 20636.800000000003,
+        "start_observation": 171991,
+        "observation_count": 34378,
+        "row_count": 171890,
+        "bytes": 19999551,
+        "sha256": "8a1b252414fb81ff53222b4f79cbc803bb2ad5d47602b330d72baf24ce5ec50e"
+      },
+      {
+        "file": "environment_00006.csv",
+        "start_time_s": 20636.9,
+        "end_time_s": 23978.5,
+        "start_observation": 206369,
+        "observation_count": 33417,
+        "row_count": 167085,
+        "bytes": 19999688,
+        "sha256": "72d855023b00283a293c4f2b658048d3094dee322623da3aa07e9c7dde734e5d"
+      },
+      {
+        "file": "environment_00007.csv",
+        "start_time_s": 23978.600000000002,
+        "end_time_s": 27367.5,
+        "start_observation": 239786,
+        "observation_count": 33890,
+        "row_count": 169450,
+        "bytes": 19999538,
+        "sha256": "4e09eac9910c21a1c4e856f09f5fe7d28d1c38f962abac487f4f71fe7a22cd44"
+      },
+      {
+        "file": "environment_00008.csv",
+        "start_time_s": 27367.600000000002,
+        "end_time_s": 30852.100000000002,
+        "start_observation": 273676,
+        "observation_count": 34846,
+        "row_count": 174230,
+        "bytes": 19999927,
+        "sha256": "7a20dee52e30d4eb8b4e137fed68d1a67b88de2e10868731dabe1e6bb1af5d67"
+      },
+      {
+        "file": "environment_00009.csv",
+        "start_time_s": 30852.2,
+        "end_time_s": 34333.4,
+        "start_observation": 308522,
+        "observation_count": 34813,
+        "row_count": 174065,
+        "bytes": 19999649,
+        "sha256": "ad2e143b85f1c377ee58ece78fd7eb6b3e99c2f1d6332774021df492f2a9321d"
+      },
+      {
+        "file": "environment_00010.csv",
+        "start_time_s": 34333.5,
+        "end_time_s": 37810.700000000004,
+        "start_observation": 343335,
+        "observation_count": 34773,
+        "row_count": 173865,
+        "bytes": 19999937,
+        "sha256": "73767fb6e921f7441d91ea79a1daaa09387fee41a01167664ff297e7b869137f"
+      },
+      {
+        "file": "environment_00011.csv",
+        "start_time_s": 37810.8,
+        "end_time_s": 41211.0,
+        "start_observation": 378108,
+        "observation_count": 34003,
+        "row_count": 170015,
+        "bytes": 19999718,
+        "sha256": "a6347d6e17de27398d30a88622fb209f28a4fd579f991cf78eb87798e106f820"
+      },
+      {
+        "file": "environment_00012.csv",
+        "start_time_s": 41211.100000000006,
+        "end_time_s": 44552.700000000004,
+        "start_observation": 412111,
+        "observation_count": 33417,
+        "row_count": 167085,
+        "bytes": 19999738,
+        "sha256": "ed15184b4336c2ae100ed2fbe8a4028fa20724d26e7162288f2b8e7e901e33d7"
+      },
+      {
+        "file": "environment_00013.csv",
+        "start_time_s": 44552.8,
+        "end_time_s": 47894.600000000006,
+        "start_observation": 445528,
+        "observation_count": 33419,
+        "row_count": 167095,
+        "bytes": 19999620,
+        "sha256": "991b777e281583d86606b57beb41fa563e5ebeb4e903aad3f4c457610e4adcce"
+      },
+      {
+        "file": "environment_00014.csv",
+        "start_time_s": 47894.700000000004,
+        "end_time_s": 51236.3,
+        "start_observation": 478947,
+        "observation_count": 33417,
+        "row_count": 167085,
+        "bytes": 19999785,
+        "sha256": "71071c68e9ed8a90c49e1b0ff7f63251e99a4a7d76ca5365197e4639f34a3c23"
+      },
+      {
+        "file": "environment_00015.csv",
+        "start_time_s": 51236.4,
+        "end_time_s": 54669.700000000004,
+        "start_observation": 512364,
+        "observation_count": 34334,
+        "row_count": 171670,
+        "bytes": 19999551,
+        "sha256": "83da9eef28e9726f0f71fcded87411d5ef21df974c5997f55495e04956f3a3ed"
+      },
+      {
+        "file": "environment_00016.csv",
+        "start_time_s": 54669.8,
+        "end_time_s": 58154.5,
+        "start_observation": 546698,
+        "observation_count": 34848,
+        "row_count": 174240,
+        "bytes": 19999894,
+        "sha256": "6630aeddbee402fce851a3fef53039d2f66670a8878732f62dbcd0cd46c245c5"
+      },
+      {
+        "file": "environment_00017.csv",
+        "start_time_s": 58154.600000000006,
+        "end_time_s": 61638.9,
+        "start_observation": 581546,
+        "observation_count": 34844,
+        "row_count": 174220,
+        "bytes": 19999751,
+        "sha256": "d7ab7edc38f13a707ed8ca076847bd46fc7a1b792788b8986b02776437f046de"
+      },
+      {
+        "file": "environment_00018.csv",
+        "start_time_s": 61639.0,
+        "end_time_s": 65123.8,
+        "start_observation": 616390,
+        "observation_count": 34849,
+        "row_count": 174245,
+        "bytes": 19999652,
+        "sha256": "47a10e562da38aae0f1cb7d4605c9c0529527e8a1cfda8defd8c418490e64668"
+      },
+      {
+        "file": "environment_00019.csv",
+        "start_time_s": 65123.9,
+        "end_time_s": 68605.2,
+        "start_observation": 651239,
+        "observation_count": 34814,
+        "row_count": 174070,
+        "bytes": 19999621,
+        "sha256": "275b07096b5e9e4e1840ff8e494e4151357b5d24ec12a60fe760b399d53e07a2"
+      },
+      {
+        "file": "environment_00020.csv",
+        "start_time_s": 68605.3,
+        "end_time_s": 72085.8,
+        "start_observation": 686053,
+        "observation_count": 34806,
+        "row_count": 174030,
+        "bytes": 19999877,
+        "sha256": "1904f3eac1e8bf1a7865dc856120ed9869227140afe1744b58346a90bd70f0f1"
+      },
+      {
+        "file": "environment_00021.csv",
+        "start_time_s": 72085.90000000001,
+        "end_time_s": 75566.3,
+        "start_observation": 720859,
+        "observation_count": 34805,
+        "row_count": 174025,
+        "bytes": 19999362,
+        "sha256": "e8ec045a1b1e59afccf16a5d7fcd38bf5ee8c73bff4a53045421351cae3b2e1d"
+      },
+      {
+        "file": "environment_00022.csv",
+        "start_time_s": 75566.40000000001,
+        "end_time_s": 79031.5,
+        "start_observation": 755664,
+        "observation_count": 34652,
+        "row_count": 173260,
+        "bytes": 19999883,
+        "sha256": "97c8eb018508c222e1d780ccf651ed731eabf8ec47b8518f2a49589fda10c56d"
+      },
+      {
+        "file": "environment_00023.csv",
+        "start_time_s": 79031.6,
+        "end_time_s": 82380.40000000001,
+        "start_observation": 790316,
+        "observation_count": 33489,
+        "row_count": 167445,
+        "bytes": 19999997,
+        "sha256": "e634ec2cb04eec400ddbfabdbee289fb616a69c8ce16273bc3fd9e37b6d6f23d"
+      },
+      {
+        "file": "environment_00024.csv",
+        "start_time_s": 82380.5,
+        "end_time_s": 85729.3,
+        "start_observation": 823805,
+        "observation_count": 33489,
+        "row_count": 167445,
+        "bytes": 19999844,
+        "sha256": "4360e0065bf77452c744dca12f64a7dc556a3f5659cb387b68f84b5fbb2df5cf"
+      },
+      {
+        "file": "environment_00025.csv",
+        "start_time_s": 85729.40000000001,
+        "end_time_s": 89077.90000000001,
+        "start_observation": 857294,
+        "observation_count": 33486,
+        "row_count": 167430,
+        "bytes": 19999779,
+        "sha256": "742ad1fc2334bbf05208cff5b011e28300fcb63673a95c74a5c7a0636f3a6d07"
+      },
+      {
+        "file": "environment_00026.csv",
+        "start_time_s": 89078.0,
+        "end_time_s": 92426.20000000001,
+        "start_observation": 890780,
+        "observation_count": 33483,
+        "row_count": 167415,
+        "bytes": 19999706,
+        "sha256": "126d79bae3c95028e558cc8a1be2a63959e42d88f1c24f2b0b8ae4c5535db345"
+      },
+      {
+        "file": "environment_00027.csv",
+        "start_time_s": 92426.3,
+        "end_time_s": 95774.90000000001,
+        "start_observation": 924263,
+        "observation_count": 33487,
+        "row_count": 167435,
+        "bytes": 19999780,
+        "sha256": "5c34e4f8f8fc65712cea7b47ba5f36ccca416325be8f8df678dd31e21d1949eb"
+      },
+      {
+        "file": "environment_00028.csv",
+        "start_time_s": 95775.0,
+        "end_time_s": 99123.6,
+        "start_observation": 957750,
+        "observation_count": 33487,
+        "row_count": 167435,
+        "bytes": 19999378,
+        "sha256": "373ce4ad9f8dd6341da805c666fe29d0b2ce8e39e5019adc866e357c0268399d"
+      },
+      {
+        "file": "environment_00029.csv",
+        "start_time_s": 99123.70000000001,
+        "end_time_s": 102451.8,
+        "start_observation": 991237,
+        "observation_count": 33282,
+        "row_count": 166410,
+        "bytes": 19999614,
+        "sha256": "bc353b95f648cc2d3ccb3c91ad0c0047d1c179f3fce9922a3780d85f3adc928f"
+      },
+      {
+        "file": "environment_00030.csv",
+        "start_time_s": 102451.90000000001,
+        "end_time_s": 105812.8,
+        "start_observation": 1024519,
+        "observation_count": 33610,
+        "row_count": 168050,
+        "bytes": 19999820,
+        "sha256": "c664f36777d1fcc22a6cd300303ee19bcb7e0e2384b47abba16c5147b7c3ae7c"
+      },
+      {
+        "file": "environment_00031.csv",
+        "start_time_s": 105812.90000000001,
+        "end_time_s": 109279.6,
+        "start_observation": 1058129,
+        "observation_count": 34668,
+        "row_count": 173340,
+        "bytes": 19999892,
+        "sha256": "c4295c7def932f545bae82ad063f0281c7d0f3cfb7d89d5f31796f45570999bc"
+      },
+      {
+        "file": "environment_00032.csv",
+        "start_time_s": 109279.70000000001,
+        "end_time_s": 112746.0,
+        "start_observation": 1092797,
+        "observation_count": 34664,
+        "row_count": 173320,
+        "bytes": 19999725,
+        "sha256": "bdb44aef0076cfc1cc6e1fb5b05890025c0020d4eecffd6ec08d657d0cda7ef8"
+      },
+      {
+        "file": "environment_00033.csv",
+        "start_time_s": 112746.1,
+        "end_time_s": 116212.5,
+        "start_observation": 1127461,
+        "observation_count": 34665,
+        "row_count": 173325,
+        "bytes": 19999914,
+        "sha256": "438c0d62b89784e1e1f55c203b375a8874e90a34531c75424e98b6b5b9efdda5"
+      },
+      {
+        "file": "environment_00034.csv",
+        "start_time_s": 116212.6,
+        "end_time_s": 119679.3,
+        "start_observation": 1162126,
+        "observation_count": 34668,
+        "row_count": 173340,
+        "bytes": 19999519,
+        "sha256": "bce14cbb28c805f72e29ec4309f1fd1ac2a29c84cff54140a56424698b184fc7"
+      },
+      {
+        "file": "environment_00035.csv",
+        "start_time_s": 119679.40000000001,
+        "end_time_s": 123146.20000000001,
+        "start_observation": 1196794,
+        "observation_count": 34669,
+        "row_count": 173345,
+        "bytes": 19999578,
+        "sha256": "60c9088f2312108f33d0e3f31fae7e4f8674ef52f3dd8a5ee60f93208be563d2"
+      },
+      {
+        "file": "environment_00036.csv",
+        "start_time_s": 123146.3,
+        "end_time_s": 126612.40000000001,
+        "start_observation": 1231463,
+        "observation_count": 34662,
+        "row_count": 173310,
+        "bytes": 19999481,
+        "sha256": "e5d296be1598f552ed86e13f0a139fb3c11fdf36231318380543815d1d0693f0"
+      },
+      {
+        "file": "environment_00037.csv",
+        "start_time_s": 126612.5,
+        "end_time_s": 130078.90000000001,
+        "start_observation": 1266125,
+        "observation_count": 34665,
+        "row_count": 173325,
+        "bytes": 19999483,
+        "sha256": "cbcac72da2bdd089140335a33958c0b903a9c73f716441bb27d40e2ad4ac27a0"
+      },
+      {
+        "file": "environment_00038.csv",
+        "start_time_s": 130079.0,
+        "end_time_s": 133533.1,
+        "start_observation": 1300790,
+        "observation_count": 34542,
+        "row_count": 172710,
+        "bytes": 19999916,
+        "sha256": "999f7b955fbdbe7d16804c059e952d73b65c9c688f1fb4e4879babad39d9fa6f"
+      },
+      {
+        "file": "environment_00039.csv",
+        "start_time_s": 133533.2,
+        "end_time_s": 136981.9,
+        "start_observation": 1335332,
+        "observation_count": 34488,
+        "row_count": 172440,
+        "bytes": 19999902,
+        "sha256": "127be4daaf403efe950a560fb2a539c76fa8f9afc7018b94a3b1a4e6cfbc024b"
+      },
+      {
+        "file": "environment_00040.csv",
+        "start_time_s": 136982.0,
+        "end_time_s": 137390.6,
+        "start_observation": 1369820,
+        "observation_count": 4087,
+        "row_count": 20435,
+        "bytes": 2370474,
+        "sha256": "e5885aee88d6c12fa04c9aaaa2acfb5b99870c2786228a7ed9950cc6d90d0472"
+      }
+    ],
+    "max_part_bytes": 20000000,
+    "start_time_s": 0.0,
+    "end_time_s": 137390.6,
+    "requested_end_time_s": 137390.6,
+    "observation_count": 1373907,
+    "row_count": 6869535,
+    "interval_s": 0.1,
+    "includes_turning_times": true,
+    "position_interpolation": "linear",
+    "channel_interpolation": "previous",
+    "channel_process": "independent LoS and fading draws on shared physical-time observations",
+    "window_mean": "last W CSV observations at or before query time",
+    "csv_sha256": "d414648cf4c2fed3ff867faa1e6a81698a7f6d6595aaee6deb11fd72d9405b25",
+    "checksum_definition": "SHA-256 of ordered complete CSV part bytes, including each header"
+  }
+}

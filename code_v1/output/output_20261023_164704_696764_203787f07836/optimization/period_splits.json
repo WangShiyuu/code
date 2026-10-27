@@ -1,0 +1,2430 @@
+[
+  {
+    "selection_index": 0,
+    "time_s": 0.0,
+    "first_period": true,
+    "sample_counts": [
+      387,
+      387,
+      387,
+      387,
+      387
+    ],
+    "current_cuts": [
+      "P4",
+      "P4",
+      "P4",
+      "P4",
+      "P4"
+    ],
+    "window_observations": 0,
+    "total_block_observations": 0,
+    "window_channel_gains": [
+      6.871253840929137e-13,
+      3.45963246501628e-12,
+      2.062942035223143e-12,
+      2.9659175738028564e-10,
+      2.4430601359553065e-10
+    ],
+    "current_channel_gains": [
+      6.871253840929137e-13,
+      3.45963246501628e-12,
+      2.062942035223143e-12,
+      2.9659175738028564e-10,
+      2.4430601359553065e-10
+    ],
+    "score_before_j": 205.2169420979776,
+    "candidate_records": [
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 218.37414748779582,
+        "delta_j": 13.157205389818216,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 99.15963672645219,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 113.95579203503392,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 220.45620011428522,
+        "delta_j": 15.239258016307616,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 99.15963672645219,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 113.95579203503392,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 222.53825274077462,
+        "delta_j": 17.321310642797016,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 99.15963672645219,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 113.95579203503392,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 202.9376801486141,
+        "delta_j": -2.2792619493635016,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 99.15963672645219,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 113.95579203503392,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P5",
+        "feasible": true,
+        "score_j": 196.9168551791952,
+        "delta_j": -8.300086918782398,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P6",
+        "feasible": true,
+        "score_j": 199.98404352248994,
+        "delta_j": -5.232898575487667,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 134.76369972500976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 153.6113389624931,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 199.4786800333591,
+        "delta_j": -5.73826206461851,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 149.07295634928926,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 174.46085077976502,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 205.69575215724814,
+        "delta_j": 0.4788100592705291,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 170.54783477232922,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 204.33785546095106,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 204.21720411348423,
+        "delta_j": 7.300348934289019,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 206.27703755112958,
+        "delta_j": 9.360182371934371,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 208.3368709887749,
+        "delta_j": 11.420015809579695,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 194.72615993887902,
+        "delta_j": -2.190695240316188,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P5",
+        "feasible": true,
+        "score_j": 191.37074784384393,
+        "delta_j": -5.54610733535128,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P6",
+        "feasible": true,
+        "score_j": 194.084285852337,
+        "delta_j": -2.83256932685822,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 133.29427668570298,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 150.4735949342878,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 193.99348914533354,
+        "delta_j": -2.9233660338616687,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 148.33801319270674,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 169.85723572172327,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 198.79718934152083,
+        "delta_j": 1.8803341623256244,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 169.81289161574674,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 196.90749654750584,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 200.1518764299825,
+        "delta_j": 8.781128586138578,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 202.21705804059619,
+        "delta_j": 10.846310196752256,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 204.28223965120984,
+        "delta_j": 12.911491807365906,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 189.15873454000422,
+        "delta_j": -2.2120133038397114,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P5",
+        "feasible": true,
+        "score_j": 185.12624058285323,
+        "delta_j": -6.2445072609907015,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P6",
+        "feasible": true,
+        "score_j": 187.92490245316205,
+        "delta_j": -3.445845390681882,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 133.65684657079834,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 151.23773074863084,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 187.7165616174058,
+        "delta_j": -3.654186226438128,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 148.51935389041142,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 170.96976822088666,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 192.86046134072055,
+        "delta_j": 1.4897134968766181,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 169.99423231345142,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 198.70042810092417,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 185.90979250205476,
+        "delta_j": 0.7835519192015283,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 187.94832502958124,
+        "delta_j": 2.822084446728013,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 189.98685755710775,
+        "delta_j": 4.860616974254526,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 183.02045175033524,
+        "delta_j": -2.1057888325179874,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P5",
+        "feasible": true,
+        "score_j": 182.67129275638635,
+        "delta_j": -2.454947826466878,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P6",
+        "feasible": true,
+        "score_j": 185.04579615619133,
+        "delta_j": -0.08044442666189866,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 131.77283300704775,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 148.51811354757368,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 185.57793138928236,
+        "delta_j": 0.4516908064291272,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 147.57706928958365,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 165.38750510137766,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 189.02667175287743,
+        "delta_j": 3.9004311700242056,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 169.05194771262364,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 189.7278462619758,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 183.61750609412002,
+        "delta_j": 0.946213337733667,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 185.65652687456665,
+        "delta_j": 2.9852341181803013,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 187.69554765501326,
+        "delta_j": 5.024254898626907,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 180.56355772526402,
+        "delta_j": -2.1077350311223313,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P5",
+        "feasible": true,
+        "score_j": 180.13884762162067,
+        "delta_j": -2.5324451347656805,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 113.28882130196976,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 130.0341018424957,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P6",
+        "feasible": true,
+        "score_j": 182.52112226860666,
+        "delta_j": -0.15017048777968967,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 131.80936774664332,
+              "budget_s": 142.15576416388961,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 148.55464828716924,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 183.03565749739866,
+        "delta_j": 0.3643647410123094,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 147.59534174945955,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 165.49078923139749,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 186.515455834161,
+        "delta_j": 3.8441630777746525,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 169.07022017249955,
+              "budget_s": 142.15576416388961,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 189.8932463383301,
+              "budget_s": 385.6077864538325,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": null
+        }
+      }
+    ],
+    "initial_reference_feasibility": {
+      "checked": true,
+      "epoch_checks": [
+        {
+          "epoch_offset": 0,
+          "required_s": 101.37299127133079,
+          "budget_s": 142.15576416388961,
+          "feasible": true
+        },
+        {
+          "epoch_offset": 1,
+          "required_s": 116.48046731497726,
+          "budget_s": 385.6077864538325,
+          "feasible": true
+        }
+      ],
+      "incoming_aggregation": null
+    },
+    "initialization": "current_cuts",
+    "status": "selected",
+    "selected_cuts": [
+      "P5",
+      "P5",
+      "P5",
+      "P5",
+      "P5"
+    ],
+    "score_after_j": 180.13884762162067,
+    "changed_uav_ids": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "reference_feasibility": {
+      "checked": true,
+      "epoch_checks": [
+        {
+          "epoch_offset": 0,
+          "required_s": 113.28882130196976,
+          "budget_s": 142.15576416388961,
+          "feasible": true
+        },
+        {
+          "epoch_offset": 1,
+          "required_s": 130.0341018424957,
+          "budget_s": 385.6077864538325,
+          "feasible": true
+        }
+      ],
+      "incoming_aggregation": null
+    },
+    "start_epoch": 1
+  },
+  {
+    "selection_index": 1,
+    "time_s": 510.9216014163575,
+    "first_period": false,
+    "sample_counts": [
+      3355,
+      3355,
+      3355,
+      3355,
+      3355
+    ],
+    "current_cuts": [
+      "P5",
+      "P5",
+      "P5",
+      "P5",
+      "P5"
+    ],
+    "window_observations": 20,
+    "total_block_observations": 52,
+    "window_channel_gains": [
+      3.3574305129562564e-12,
+      4.017027433516941e-10,
+      1.6700641418088188e-09,
+      7.161501075702992e-10,
+      9.616204433631589e-11
+    ],
+    "current_channel_gains": [
+      2.4501050482449206e-12,
+      1.023548278360323e-09,
+      4.544467329614677e-10,
+      1.3838725293912742e-13,
+      2.8409692105755983e-11
+    ],
+    "score_before_j": 1438.6070158179907,
+    "candidate_records": [
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 1555.32207227977,
+        "delta_j": 116.71505646177934,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 1572.9796369405549,
+        "delta_j": 134.37262112256417,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 1590.6372016013397,
+        "delta_j": 152.030185783349,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 1471.3186890116021,
+        "delta_j": 32.71167319361143,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P4",
+        "feasible": true,
+        "score_j": 1489.5145702241432,
+        "delta_j": 50.907554406152485,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P6",
+        "feasible": false,
+        "score_j": 1458.9536767869715,
+        "delta_j": 20.346660968980814,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1157.5859379558365,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1184.2137588743967,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 1448.1053277634762,
+        "delta_j": 9.498311945485511,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1286.9919488677422,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1316.5364880224067,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 11.573884299325556,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 0,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 1477.0501348570444,
+        "delta_j": 38.44311903905373,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1473.1630525093422,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1508.719806654244,
+              "budget_s": 1397.6671098038462,
+              "feasible": false
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 16.14229110441986,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 1465.5393589125722,
+        "delta_j": 26.932343094581483,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 1483.1144834048569,
+        "delta_j": 44.50746758686614,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 1500.6896078971413,
+        "delta_j": 62.08259207915057,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 1442.1512343644226,
+        "delta_j": 3.544218546431921,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P4",
+        "feasible": true,
+        "score_j": 1460.0185052722122,
+        "delta_j": 21.41148945422151,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P6",
+        "feasible": false,
+        "score_j": 1457.6415229817237,
+        "delta_j": 19.034507163732997,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1140.613813395645,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1167.2416343142052,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 1457.9703148217277,
+        "delta_j": 19.363299003736984,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1278.5034081828987,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1305.131229101459,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 1,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 1481.6710681970821,
+        "delta_j": 43.064052379091436,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1464.6745118244987,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1491.967834606044,
+              "budget_s": 1397.6671098038462,
+              "feasible": false
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 10.594325832857376,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 1452.7972679446393,
+        "delta_j": 14.190252126648602,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 1470.3606924104151,
+        "delta_j": 31.753676592424426,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 1487.9241168761905,
+        "delta_j": 49.317101058199796,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 1438.0117475247075,
+        "delta_j": -0.5952682932831976,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P4",
+        "feasible": true,
+        "score_j": 1455.8323815885087,
+        "delta_j": 17.22536577051801,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P6",
+        "feasible": false,
+        "score_j": 1457.4553002387997,
+        "delta_j": 18.848284420809023,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1141.7175498736867,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1168.345370792247,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 1459.3703678807128,
+        "delta_j": 20.763352062722106,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1279.055428575442,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1305.6832494940022,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.594082643585443,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 2,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 1482.3268776593636,
+        "delta_j": 43.719861841372904,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1465.226532217042,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1493.027161235531,
+              "budget_s": 1397.6671098038462,
+              "feasible": false
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 10.985221322761031,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 1459.3770809696584,
+        "delta_j": 21.36533344495092,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 971.4148343142365,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 994.7750754486693,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 6.874719481328481,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 1476.9470937294464,
+        "delta_j": 38.935346204738835,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 971.4148343142365,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 994.7750754486693,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 6.874719481328481,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 1494.5171064892343,
+        "delta_j": 56.50535896452675,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 971.4148343142365,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 994.7750754486693,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 6.874719481328481,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 1439.747427485188,
+        "delta_j": 1.735679960480411,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 971.4148343142365,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 994.7750754486693,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 6.874719481328481,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P4",
+        "feasible": true,
+        "score_j": 1457.5943227920525,
+        "delta_j": 19.582575267344964,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 971.4148343142365,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 994.9972131438573,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 6.874719481328481,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P6",
+        "feasible": false,
+        "score_j": 1456.9648941166595,
+        "delta_j": 18.953146591951963,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1198.4477763066118,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1228.9848621429087,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 10.63053206455989,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 1457.9867286227714,
+        "delta_j": 19.974981098063836,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1307.429695877673,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1350.1281651239526,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 17.63251845095376,
+            "budget_s": 16.84194523787852,
+            "feasible": false
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 3,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 1481.3623225486324,
+        "delta_j": 43.350575023924875,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1493.600799519273,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1551.922738472649,
+              "budget_s": 1397.6671098038462,
+              "feasible": false
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 26.627820918560296,
+            "budget_s": 16.84194523787852,
+            "feasible": false
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P0",
+        "feasible": true,
+        "score_j": 1481.774540478239,
+        "delta_j": 43.762792953531516,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P1",
+        "feasible": true,
+        "score_j": 1499.3651190047167,
+        "delta_j": 61.35337148000917,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P2",
+        "feasible": true,
+        "score_j": 1516.955697531194,
+        "delta_j": 78.94395000648638,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P3",
+        "feasible": true,
+        "score_j": 1447.0236264318244,
+        "delta_j": 9.011878907116852,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P4",
+        "feasible": true,
+        "score_j": 1464.9524978309537,
+        "delta_j": 26.940750306246173,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1012.2766726650118,
+              "budget_s": 1054.632546173731,
+              "feasible": true
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1038.904493583572,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P6",
+        "feasible": false,
+        "score_j": 1457.292227860761,
+        "delta_j": 19.280480336053415,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1147.3260535392412,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1173.9538744578015,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 8.379750322712095,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P7",
+        "feasible": false,
+        "score_j": 1455.5257799623514,
+        "delta_j": 17.51403243764389,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1281.8604736367897,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1308.48829455535,
+              "budget_s": 1397.6671098038462,
+              "feasible": true
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 9.703076947379653,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      },
+      {
+        "sweep": 0,
+        "uav_id": 4,
+        "candidate": "P8",
+        "feasible": false,
+        "score_j": 1480.209570938731,
+        "delta_j": 42.19782341402356,
+        "reference_check": {
+          "checked": true,
+          "epoch_checks": [
+            {
+              "epoch_offset": 0,
+              "required_s": 1468.0315772783897,
+              "budget_s": 1054.632546173731,
+              "feasible": false
+            },
+            {
+              "epoch_offset": 1,
+              "required_s": 1498.4769679546391,
+              "budget_s": 1397.6671098038462,
+              "feasible": false
+            }
+          ],
+          "incoming_aggregation": {
+            "required_s": 12.904530616757775,
+            "budget_s": 16.84194523787852,
+            "feasible": true
+          }
+        }
+      }
+    ],
+    "initial_reference_feasibility": {
+      "checked": true,
+      "epoch_checks": [
+        {
+          "epoch_offset": 0,
+          "required_s": 1012.2766726650118,
+          "budget_s": 1054.632546173731,
+          "feasible": true
+        },
+        {
+          "epoch_offset": 1,
+          "required_s": 1038.904493583572,
+          "budget_s": 1397.6671098038462,
+          "feasible": true
+        }
+      ],
+      "incoming_aggregation": {
+        "required_s": 8.379750322712095,
+        "budget_s": 16.84194523787852,
+        "feasible": true
+      }
+    },
+    "initialization": "current_cuts",
+    "status": "selected",
+    "selected_cuts": [
+      "P5",
+      "P5",
+      "P3",
+      "P5",
+      "P5"
+    ],
+    "score_after_j": 1438.0117475247075,
+    "changed_uav_ids": [
+      2
+    ],
+    "reference_feasibility": {
+      "checked": true,
+      "epoch_checks": [
+        {
+          "epoch_offset": 0,
+          "required_s": 1012.2766726650118,
+          "budget_s": 1054.632546173731,
+          "feasible": true
+        },
+        {
+          "epoch_offset": 1,
+          "required_s": 1038.904493583572,
+          "budget_s": 1397.6671098038462,
+          "feasible": true
+        }
+      ],
+      "incoming_aggregation": {
+        "required_s": 8.379750322712095,
+        "budget_s": 16.84194523787852,
+        "feasible": true
+      }
+    },
+    "start_epoch": 3
+  }
+]

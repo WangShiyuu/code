@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "kind": "dynamic_uav_sfl_optimization",
+  "status": "failed",
+  "epochs": 100,
+  "completed_epochs": 2,
+  "blocks": 132,
+  "failure": {
+    "type": "RuntimeError",
+    "reason": "可行性恢复后原期限/硬件约束仍不满足",
+    "time_s": 1309.6515508020818,
+    "epoch": 3,
+    "block": 81,
+    "completed_epochs": 2,
+    "committed_blocks": 132,
+    "diagnostics": {
+      "iterations": 0,
+      "objective_history": [],
+      "iteration_records": [],
+      "original_feasibility": 0.5155733398306386,
+      "kkt_residual": null,
+      "feasibility_recovery": true,
+      "cvxpy_solver": "CLARABEL",
+      "variable_count": 21,
+      "active_resource_count": 20,
+      "variable_names": [
+        "('f', 0)",
+        "('f', 1)",
+        "('f', 2)",
+        "('f', 3)",
+        "('f', 4)",
+        "('p', 0)",
+        "('p', 1)",
+        "('p', 2)",
+        "('p', 3)",
+        "('p', 4)",
+        "('bu', 0)",
+        "('bu', 1)",
+        "('bu', 2)",
+        "('bu', 3)",
+        "('bu', 4)",
+        "('bd', 0)",
+        "('bd', 1)",
+        "('bd', 2)",
+        "('bd', 3)",
+        "('bd', 4)",
+        "('train', -1)"
+      ],
+      "time_scale_s": 9.773600196223398,
+      "energy_scale_j": 18.331228148039486,
+      "internal_deadline_margin_s": 9.773600196223398e-08,
+      "margin_released_on_refinement": false,
+      "cvxpy_calls": 1,
+      "cone_scaling": "physical_mhz",
+      "last_solver_status": "optimal",
+      "recovery_slack": 0.5155733543701917,
+      "numerical_repairs": 0,
+      "maximum_repair_fraction": 0.0,
+      "maximum_resource_repair": 0.0,
+      "strictly_feasible_anchor_available": false,
+      "wall_s": 0.05801820009946823
+    }
+  },
+  "source_git": {
+    "commit": "eb2359ebdf675176297e25a8125aad54ca5f545a",
+    "short_hash": "eb2359ebdf67",
+    "code_modified": false
+  },
+  "created_at_utc": "2026-10-23T10:33:00.829281+00:00",
+  "preparation_sha256": "9b936d75bd6065cb8506d3b8ae375ff296cb8e5788795a39def6a57162de0365",
+  "decisions_sha256": "a368ef360f36737c261fb97c873af3de456f145cbba24e57285603b3649ce883",
+  "periods_sha256": "28a338dfe01c7c54c0cf5771c33103050af396ce9c991d14664f2deefeec46b7",
+  "decisions": "block_decisions.jsonl",
+  "periods": "period_splits.json",
+  "network_updates": 0,
+  "physical_execution": {
+    "simulated_elapsed_s": 1309.6515508020818,
+    "training_blocks": 131,
+    "critical_path": {
+      "uav_compute_s": 1223.9277694865211,
+      "server_compute_s": 13.213081651200026,
+      "communication_s": 72.50069966436115,
+      "aggregation_s": 0.01
+    },
+    "uavs": [
+      {
+        "uav_id": 0,
+        "compute_j": 102.33105404256327,
+        "transmit_j": 4.800831786529825,
+        "barrier_wait_s": 5.061680290097078,
+        "compute_s": 1229.554287925266,
+        "up_s": 43.861466211785306,
+        "down_s": 18.089883742612535,
+        "modeled_training_j": 107.1318858290931
+      },
+      {
+        "uav_id": 1,
+        "compute_j": 101.91845948222581,
+        "transmit_j": 4.446100442165277,
+        "barrier_wait_s": 13.263258659876687,
+        "compute_s": 1234.1259601239638,
+        "up_s": 32.85735941555075,
+        "down_s": 16.32073997037096,
+        "modeled_training_j": 106.36455992439109
+      },
+      {
+        "uav_id": 2,
+        "compute_j": 55.2687962683817,
+        "transmit_j": 3.4267439846630503,
+        "barrier_wait_s": 13.498803128964374,
+        "compute_s": 1200.2762761490621,
+        "up_s": 59.08854505999279,
+        "down_s": 18.54973307654332,
+        "modeled_training_j": 58.69554025304475
+      },
+      {
+        "uav_id": 3,
+        "compute_j": 100.96847710262493,
+        "transmit_j": 3.7383158900301994,
+        "barrier_wait_s": 0.010001235073189951,
+        "compute_s": 1237.8586092228402,
+        "up_s": 42.22537928262427,
+        "down_s": 16.473328429225155,
+        "modeled_training_j": 104.70679299265512
+      },
+      {
+        "uav_id": 4,
+        "compute_j": 102.16987757003534,
+        "transmit_j": 4.600469912378789,
+        "barrier_wait_s": 11.445240695511291,
+        "compute_s": 1230.9844482060648,
+        "up_s": 36.63174484831953,
+        "down_s": 17.50588441986627,
+        "modeled_training_j": 106.77034748241412
+      }
+    ],
+    "server": {
+      "compute_j": 190.5528345753615,
+      "transmit_j": 173.87913927723648,
+      "aggregation_j": 0.1
+    },
+    "modeled_system_training_j": 848.2011003341961,
+    "communication": {
+      "activations_and_labels_up": {
+        "bytes": 382814680,
+        "transmissions": 655,
+        "csi_segments": 655,
+        "cross_boundary_transmissions": 0
+      },
+      "gradients_down": {
+        "bytes": 382648320,
+        "transmissions": 655,
+        "csi_segments": 655,
+        "cross_boundary_transmissions": 0
+      },
+      "prefix_state_up": {
+        "bytes": 32111880,
+        "transmissions": 5,
+        "csi_segments": 5,
+        "cross_boundary_transmissions": 0
+      },
+      "prefix_state_down": {
+        "bytes": 27245792,
+        "transmissions": 5,
+        "csi_segments": 5,
+        "cross_boundary_transmissions": 0
+      }
+    },
+    "battery_feasibility": null,
+    "mission_deadline_enforced": true,
+    "channel_policy": "每个训练/聚合块起始CSI冻结，块末重新观测",
+    "excluded": [
+      "起飞前统一初始化下发",
+      "固定飞行及识别/采集/基础运行能量",
+      "尚未标定的接收、空闲、内存及数据处理功耗",
+      "无线协议开销与重传"
+    ]
+  },
+  "wall_s": 109.65480390004814
+}

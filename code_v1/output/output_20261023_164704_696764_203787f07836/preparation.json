@@ -1,0 +1,153 @@
+{
+  "schema_version": 2,
+  "status": "prepared",
+  "config": {
+    "mission": {
+      "num_uavs": 5,
+      "duration_s": 600.0,
+      "x_min_m": -500.0,
+      "x_max_m": 500.0,
+      "y_min_m": -500.0,
+      "y_max_m": 500.0,
+      "altitude_m": 100.0,
+      "speed_m_s": 10.0,
+      "lane_spacing_m": 100.0,
+      "trace_interval_s": 0.1
+    },
+    "data": {
+      "root": "D:\\Wangshiyu\\Work1SFL\\DataSet\\CBCL StreetScenes",
+      "output": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\data",
+      "image_size": 64,
+      "val_fraction": 0.15,
+      "test_fraction": 0.15,
+      "seed": 42,
+      "samples_per_uav": null,
+      "initial_samples_per_uav": null,
+      "initial_fraction": 0.1,
+      "sample_rate_per_s": null
+    },
+    "training": {
+      "total_epochs": 100,
+      "aggregation_period": 2,
+      "epoch_step_size": 0.18,
+      "batch_size": 32,
+      "eval_batch_size": 64,
+      "optimizer": "sgd",
+      "momentum": 0.0,
+      "weight_decay": 0.0,
+      "scheduler": "constant",
+      "bn": "frozen",
+      "initialization_seed": 42,
+      "initialization_checkpoint": null,
+      "device": "auto",
+      "workers": 0,
+      "split_profile_path": null
+    },
+    "uav": {
+      "f_min_hz": 200000000.0,
+      "f_max_hz": 1500000000.0,
+      "f_ref_hz": 1000000000.0,
+      "kappa": 1e-28,
+      "cycles_per_flop": 0.5,
+      "p_up_min_w": 0.01,
+      "p_up_max_w": 1.0,
+      "p_up_ref_w": 0.5
+    },
+    "server": {
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "parallel_branches": null,
+      "frequency_hz": 3000000000.0,
+      "cycles_per_flop": 0.03,
+      "kappa": 1e-28,
+      "downlink_power_w": 2.0,
+      "max_downlink_power_w": null,
+      "aggregation_time_s": 0.01,
+      "aggregation_power_w": 10.0
+    },
+    "radio": {
+      "total_up_hz": 20000000.0,
+      "total_down_hz": 20000000.0,
+      "min_up_hz": 100000.0,
+      "min_down_hz": 100000.0
+    },
+    "channel": {
+      "seed": 42,
+      "carrier_hz": 2400000000.0,
+      "noise_psd_w_hz": 3.981e-21,
+      "los_a": 9.61,
+      "los_b": 0.16,
+      "los_loss_db": 1.0,
+      "nlos_loss_db": 20.0,
+      "rician_k": 10.0
+    },
+    "selection": {
+      "candidates": [
+        "P0",
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8"
+      ],
+      "initial_split": "P4",
+      "channel_window_size": 20,
+      "max_sweeps": 1,
+      "energy_tolerance_j": 1e-09
+    },
+    "optimization": {
+      "deadline_factor": 1.2,
+      "calibration_seed": null,
+      "max_part_bytes": 20000000,
+      "proximal_coefficient": 0.01,
+      "backtracking_ratio": 0.5,
+      "armijo_coefficient": 0.0001,
+      "max_iterations": 100,
+      "max_backtracks": 30,
+      "direction_tolerance": 1e-05,
+      "feasibility_tolerance": 1e-06,
+      "kkt_tolerance": 0.0001
+    },
+    "energy": {
+      "initial_energy_j": null,
+      "flight_energy_j": null,
+      "fixed_energy_j": null,
+      "reserve_energy_j": null
+    },
+    "theory": {
+      "L": 1.0,
+      "G": 1.0,
+      "V": 0.02,
+      "rho": 0.002,
+      "delta": 0.1,
+      "epsilon": 0.05
+    },
+    "output": {
+      "scenario_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\scenario"
+    }
+  },
+  "epochs": 100,
+  "source_git": {
+    "commit": "203787f07836660ae1925f45711d36a323249704",
+    "short_hash": "203787f07836",
+    "code_modified": false
+  },
+  "manifest_sha256": "2cec88a4570c61419a7b7cbfb63eb1da8b417c474ec3dc53d1881f6f3df88492",
+  "data_fingerprint": "f067c74c7d34f45440547b49f76610837b985b7ccbd4030835653461055c2ccd",
+  "manifest_path": "D:\\Wangshiyu\\Work1SFL\\code\\code_v1\\output\\data\\data.json",
+  "environment": "environment",
+  "calibration": "calibration.json",
+  "profiles": "split_profiles.json",
+  "scenario_sha256": "cd1c61487c9fdf9e1ecb5d0541f47babea9ef6c213bd0655356d8563146a3aca",
+  "calibration_sha256": "4173c1d68b8bebdf9eac1757d99e0adcef66fd5d59ef2da4e0dfc736cbbd494f",
+  "profiles_sha256": "dcd2484c0a8513ebe2a8114a59cfab6d54a207aed637dc55a1a5ccafb3c5710b",
+  "initialization_sha256": null,
+  "preparation_wall_s": 95.75369199970737,
+  "created_at_utc": "2026-10-23T08:48:40.034557+00:00"
+}

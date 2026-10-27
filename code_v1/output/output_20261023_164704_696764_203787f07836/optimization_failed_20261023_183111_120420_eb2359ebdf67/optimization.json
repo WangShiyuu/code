@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "kind": "dynamic_uav_sfl_optimization",
+  "status": "failed",
+  "epochs": 100,
+  "completed_epochs": 1,
+  "blocks": 51,
+  "failure": {
+    "type": "RuntimeError",
+    "reason": "近端凸子问题失败：optimal",
+    "time_s": 510.92160514434136
+  },
+  "source_git": {
+    "commit": "203787f07836660ae1925f45711d36a323249704",
+    "short_hash": "203787f07836",
+    "code_modified": false
+  },
+  "created_at_utc": "2026-10-23T08:50:09.544961+00:00",
+  "preparation_sha256": "9b936d75bd6065cb8506d3b8ae375ff296cb8e5788795a39def6a57162de0365",
+  "decisions_sha256": "f73e6a17029b92a22eae0324033cc801015798be5193df0aff72b6d44ee672ab",
+  "periods_sha256": "3afa153626a854b18e49d64433448dfdea999b27a94e2abd500737aaf1e9aa7d",
+  "decisions": "block_decisions.jsonl",
+  "periods": "period_splits.json",
+  "network_updates": 0,
+  "physical_execution": {
+    "simulated_elapsed_s": 510.92160514434136,
+    "training_blocks": 51,
+    "critical_path": {
+      "uav_compute_s": 485.0523824678253,
+      "server_compute_s": 5.030461163520001,
+      "communication_s": 20.838761512996122,
+      "aggregation_s": 0.0
+    },
+    "uavs": [
+      {
+        "uav_id": 0,
+        "compute_j": 37.62867979633169,
+        "transmit_j": 1.8562025304356289,
+        "barrier_wait_s": 2.015770665719785e-06,
+        "compute_s": 486.0589815844307,
+        "up_s": 13.491179850850015,
+        "down_s": 6.340980529769958,
+        "modeled_training_j": 39.48488232676732
+      },
+      {
+        "uav_id": 1,
+        "compute_j": 37.141977380378904,
+        "transmit_j": 0.9692589677286424,
+        "barrier_wait_s": 7.910327206595014e-07,
+        "compute_s": 489.2554836424188,
+        "up_s": 11.244599228560574,
+        "down_s": 5.391060318809172,
+        "modeled_training_j": 38.111236348107546
+      },
+      {
+        "uav_id": 2,
+        "compute_j": 36.786171852743955,
+        "transmit_j": 0.6219355533916264,
+        "barrier_wait_s": 1.7045080205058127e-06,
+        "compute_s": 491.2949522862941,
+        "up_s": 9.836841733456296,
+        "down_s": 4.759348256563043,
+        "modeled_training_j": 37.408107406135585
+      },
+      {
+        "uav_id": 3,
+        "compute_j": 36.938137091570766,
+        "transmit_j": 0.7471267588909577,
+        "barrier_wait_s": 2.003955192897422e-06,
+        "compute_s": 490.4909545165269,
+        "up_s": 10.384349472804214,
+        "down_s": 5.01583798753496,
+        "modeled_training_j": 37.68526385046172
+      },
+      {
+        "uav_id": 4,
+        "compute_j": 37.39892733365703,
+        "transmit_j": 1.400588979255763,
+        "barrier_wait_s": 1.9677761358138923e-06,
+        "compute_s": 487.81861326863407,
+        "up_s": 12.234961610063378,
+        "down_s": 5.837567134347788,
+        "modeled_training_j": 38.79951631291279
+      }
+    ],
+    "server": {
+      "compute_j": 67.91122570752037,
+      "transmit_j": 54.689588454049826,
+      "aggregation_j": 0.0
+    },
+    "modeled_system_training_j": 314.08982040595515,
+    "communication": {
+      "activations_and_labels_up": {
+        "bytes": 131054040,
+        "transmissions": 255,
+        "csi_segments": 255,
+        "cross_boundary_transmissions": 0
+      },
+      "gradients_down": {
+        "bytes": 130990080,
+        "transmissions": 255,
+        "csi_segments": 255,
+        "cross_boundary_transmissions": 0
+      },
+      "prefix_state_up": {
+        "bytes": 0,
+        "transmissions": 0,
+        "csi_segments": 0,
+        "cross_boundary_transmissions": 0
+      },
+      "prefix_state_down": {
+        "bytes": 0,
+        "transmissions": 0,
+        "csi_segments": 0,
+        "cross_boundary_transmissions": 0
+      }
+    },
+    "battery_feasibility": null,
+    "mission_deadline_enforced": true,
+    "channel_policy": "每个训练/聚合块起始CSI冻结，块末重新观测",
+    "excluded": [
+      "起飞前统一初始化下发",
+      "固定飞行及识别/采集/基础运行能量",
+      "尚未标定的接收、空闲、内存及数据处理功耗",
+      "无线协议开销与重传"
+    ]
+  },
+  "wall_s": 57.029123299755156
+}
