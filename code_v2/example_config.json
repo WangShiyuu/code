@@ -1,0 +1,25 @@
+{
+  "seed": 42,
+  "num_uavs": 5,
+  "data": {
+    "root": "../../DataSet/CBCL StreetScenes",
+    "image_size": 64,
+    "partition": "iid",
+    "initial_fraction": 0.1,
+    "rate_per_s": 1.0
+  },
+  "training": {
+    "epochs": 100,
+    "batch_size": 32,
+    "epoch_step_size": 0.01,
+    "device": "cpu",
+    "checkpoint": null
+  },
+  "optimization": {
+    "strategy": "dynamic_opt",
+    "window_epochs": 5,
+    "reference_recovery": "none"
+  },
+  "task": {"epoch_deadline_s": 600.0},
+  "uav": {"energy_cap_j": 200000.0}
+}

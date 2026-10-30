@@ -1,0 +1,4 @@
+{
+  "training": {"epochs": 4},
+  "optimization": {"reference_recovery": "rebuild"}
+}
