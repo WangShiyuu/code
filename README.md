@@ -1,5 +1,19 @@
 # UAV-SFL 代码
 
+当前单文件函数式版本在 [`code_v2/`](code_v2/README.md)。本机在 PowerShell 中先进入目录，再按用途选择下面一条运行命令：
+
+```powershell
+cd E:\Work1SFL\code\code_v2
+
+# 小规模诊断：两机、4 epoch 合成数据。
+& '..\code_v1\.venv\Scripts\python.exe' -X utf8 -B .\uav_sfl.py smoke
+
+# 正式训练：使用已包含的官方 ImageNet 预训练权重。
+& '..\code_v1\.venv\Scripts\python.exe' -X utf8 -B .\uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
+```
+
+这些命令不需要示例 JSON，参数在 `default_config()` 中修改。正式实验的参考筛选策略、数据路径、输出含义以及新电脑安装步骤见 [v2 运行说明](code_v2/README.md)。
+
 - `code_v0/`：旧代码完整归档。
 - [`code_v1/`](code_v1/README.md)：统一数据与环境，以及周期切分、块级资源优化和实际 SFL 训练。
 - [`code_v2/`](code_v2/README.md)：按 2026-10-30 的 Notion 方案重写的单文件函数式版本；参数、平均大尺度信道、逐轮逆二次变换、电池约束和 ResNet18 训练集中在 `uav_sfl.py`。其默认参考筛选及可选重建扩展见目录内说明。下文命令和配置说明仍针对 v1。

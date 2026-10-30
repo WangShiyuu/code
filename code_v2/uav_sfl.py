@@ -1,4 +1,36 @@
-"""动态 UAV-SFL：参数、环境、式(25)—(31)优化、函数式 ResNet18 与训练。
+r"""动态 UAV-SFL：参数、环境、式(25)—(31)优化、函数式 ResNet18 与训练。
+
+运行指令（Windows PowerShell）
+-------------------------------
+先进入目录，并选择本机已安装依赖的解释器：
+    cd E:\Work1SFL\code\code_v2
+    $sflPython = (Resolve-Path '..\code_v1\.venv\Scripts\python.exe').Path
+
+然后按用途选择一条命令；以下各命令可独立运行，不必顺序全部执行：
+    # 首次运行：两机、4 epoch 合成数据，检查优化与真实反向传播流程。
+    & $sflPython -X utf8 -B .\uav_sfl.py smoke
+    # 查看参数 / 验证九切点梯度、约束和尾批步长。
+    & $sflPython -X utf8 -B .\uav_sfl.py config
+    & $sflPython -X utf8 -B .\uav_sfl.py check
+    # 准备真实 CBCL 数据清单 / 计算九个切点的画像。
+    & $sflPython -X utf8 -B .\uav_sfl.py prepare
+    & $sflPython -X utf8 -B .\uav_sfl.py profile
+    # 仅进行资源和能耗仿真。
+    & $sflPython -X utf8 -B .\uav_sfl.py simulate
+    # 使用本目录的 ImageNet 预训练权重进行 CBCL 联合优化与训练。
+    & $sflPython -X utf8 -B .\uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
+
+以上命令均不依赖示例 JSON；直接修改 default_config() 即可调整默认参数。
+新电脑没有上述解释器时，先用 python -m venv .venv 创建环境，再运行
+    & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
+后续将 $sflPython 设置为 (Resolve-Path '.\.venv\Scripts\python.exe').Path。
+
+默认 strategy='dynamic_opt'、reference_recovery='none'，使用文稿严格流程；
+参考筛选可能因样本增长而失败。要使用显式参考重建扩展，在 default_config()
+中将 reference_recovery 改为 'rebuild'，并在研究结果中说明这一扩展。
+train 默认计划 100 epoch，实际能否完成取决于约束和求解状态；smoke 只做诊断。
+结果位于本文件同目录的 output/，先查看 summary.json 中的 completed/failure，
+再查看 history.csv 和 decisions.jsonl。退出码 0/1/2 分别表示成功/错误/任务未完成。
 
 来源：同目录 notion_source.md，Notion 页面最后编辑于 2026-10-29T18:45:37Z。
 入口：python uav_sfl.py {config,prepare,profile,simulate,train,check,smoke} --help
@@ -54,33 +86,71 @@ BLOCKS = [(64, 64, 1), (64, 64, 1), (64, 128, 2), (128, 128, 1),
 
 # 1. 参数与数据结构 ------------------------------------------------------------
 def default_config() -> dict:
-    """返回独立 Config。修改此函数即可集中设置本研究全部参数。"""
+    """返回独立 Config；每次调用重新创建全部嵌套字典。
+
+    编辑顺序建议：先设 data 的数据路径/尺寸，再设 training 的轮数/步长，
+    然后设硬件、时限、电池及 optimization 策略。修改后执行 config 子命令，
+    由 validate_config 检查约束；这些默认数字是场景输入，需按实验标定。
+    """
     return {
+        # seed 同时确定数据划分与模型初始化；批次顺序再派生 epoch/UAV 子种子。
+        # 相同种子保证输入可复现；不同资源策略仍可能因时间不同使用不同 D_k。
         "seed": 42,
         "num_uavs": 5,
+        # root 放原始 Images.zip/Annotations.zip；区域图像在读取 batch 时裁剪。
+        # val/test_fraction 按原始街景划分，避免同场景区域跨集合泄漏。
+        # samples_per_uav=None 自动按训练池等量分配；整数则指定每机容量。
+        # initial_fraction 决定首次训练前需积累的比例；rate_per_s 是样本/秒。
+        # partition='dirichlet' 时 alpha 越小，通常类别偏斜越强，实际计数另存。
+        # fixed_epoch_counts=None 按物理时间释放；给列表则改为共同快照消融。
         "data": {"kind": "cbcl", "root": str(ROOT.parents[1] / "DataSet" / "CBCL StreetScenes"),
                  "image_size": 64, "val_fraction": 0.1, "test_fraction": 0.1,
                  "samples_per_uav": None, "initial_fraction": 0.1, "rate_per_s": 1.0,
                  "synthetic_per_uav": 20, "synthetic_eval_size": 12,
                  "partition": "iid", "dirichlet_alpha": 0.5,
                  "fixed_epoch_counts": None},
+        # epochs 是本地 epoch 数，aggregation_period=2 表示每两轮完整聚合一次。
+        # epoch_step_size 是一整轮的累计步长，batch 实际步长还要乘 |B|/D_k。
+        # checkpoint=None 时正式 train 要求 --checkpoint；smoke 显式允许随机初始化。
+        # device 选择本机执行设备；torch_threads 控制 CPU 并行度，不代表 UAV 算力。
         "training": {"epochs": 100, "aggregation_period": 2, "epoch_step_size": 0.01,
                      "batch_size": 32, "device": "cpu", "torch_threads": 4,
                      "checkpoint": None, "allow_random_init": False, "save_checkpoint": True},
+        # empirical 使用上面的 epochs；theoretical 使用式(23)并要求已验证有效界。
+        # epsilon 的含义是梯度范数平方目标上界，不能解释为分类错误率。
         "budget": {"mode": "empirical", "A_bar": 3.85, "C_bar": 0.0115,
                    "epsilon": 0.05, "effective_bound_verified": False},
+        # 轨迹坐标/半径单位 m，速度 m/s。偏心圆使 UAV 与服务器距离随时间变化。
+        # 轨迹是外部给定条件，连续资源优化不会改变飞行路线或速度。
         "trajectory": {"server_xyz_m": [0.0, 0.0, 0.0], "altitude_m": 100.0,
                        "radius_min_m": 250.0, "radius_max_m": 450.0,
                        "center_offset_m": 150.0, "speed_m_s": 10.0},
+        # beta_l/beta_n 是线性参考功率增益，alpha_l/alpha_n 是路径损耗指数。
+        # los_a/los_b 的仰角单位为度；noise_psd_w_hz 是 W/Hz，需乘分配带宽。
         "channel": {"los_a": 9.61, "los_b": 0.16, "beta_l": 1e-4, "beta_n": 1e-6,
                     "alpha_l": 2.0, "alpha_n": 2.5, "noise_psd_w_hz": 3.981e-21},
+        # 计算功率 Pc=kappa*f^3；compute_power_max_w 据此决定频率上限。
+        # power_max_w 是上行发射功率 W，cycles_per_flop 将 FLOPs 换成等效周期。
+        # energy_cap_j 是扣除固定消耗后的训练电量 J，可为公共标量或长度 N 的列表。
         "uav": {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
                 "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
+        # frequency_hz 为每条并行后缀分支的频率，downlink_power_w 为每条链路功率。
+        # aggregation_time_s/energy_j 每次完整聚合只计一次，不乘 UAV 数量。
         "server": {"frequency_hz": 3e9, "kappa": 1e-28, "cycles_per_flop": 0.03,
                    "downlink_power_w": 2.0, "aggregation_time_s": 0.01,
                    "aggregation_energy_j": 0.1},
+        # 上下行各自共享总带宽，单位 Hz；两方向预算不能互相挪用。
         "radio": {"total_up_hz": 2e7, "total_down_hz": 2e7},
+        # 初始参考频率/功率相对于对应上限的比例，初始带宽按 N 等分。
+        # 参考配置只提供候选评分/初值，执行前仍需校验时限和电池。
         "reference": {"frequency_fraction": 0.8, "power_fraction": 0.5},
+        # strategy: fixed_fixed / fixed_opt / dynamic_opt / no_window，详见 README。
+        # fixed_split 为 0..8；动态策略从它开始寻找首周期切分，之后可改变。
+        # window_epochs 只统计已完成轮次；max_iterations 为每次 P2 的迭代上限。
+        # relative_tolerance 控制真实能耗收敛；feasibility_tolerance 用于原约束核验。
+        # positive_floor 是比例变量的数值正下界，限制开区间边缘的病态求解。
+        # max_initial_candidates / max_coordinate_sweeps 限制离散搜索规模；
+        # 达到上限有独立状态，不能被解释为全局最优或全局不可行。
         "optimization": {"strategy": "dynamic_opt", "fixed_split": 4,
                          "reference_recovery": "none",
                          "window_epochs": 5, "max_iterations": 50,
@@ -88,6 +158,7 @@ def default_config() -> dict:
                          "positive_floor": 1e-5, "solver": "CLARABEL",
                          "max_initial_candidates": 60000, "max_coordinate_sweeps": 100,
                          "score_tolerance_j": 1e-10},
+        # deadline 是单 epoch 时限；fixed_energy_j 是系统固定消耗，仅汇总时加一次。
         "task": {"epoch_deadline_s": 600.0, "fixed_energy_j": 0.0},
         "output_root": str(ROOT / "output"),
     }
@@ -315,7 +386,13 @@ def partition_clients(indices: list[int], records: list[dict], config: dict) -> 
 
 
 def prepare_data(config: dict) -> dict:
-    """I/O：返回 Data；CBCL 按原始场景 80/10/10 隔离，再等量分配训练区域。"""
+    """I/O：返回 Data；默认按原始场景 80/10/10 隔离，再等量分配训练区域。
+
+    records 是全体有效区域表；clients[n]、val、test 都保存对该表的整数索引。
+    clients[n] 的固定顺序同时表示采集顺序，后续只取前 D_k 个；训练打乱的是
+    快照副本，不能打乱这份永久序列。release_s 长度等于每机容量，所有机共用。
+    此函数只读取 ZIP/生成清单，不训练、不写裁剪缓存；保存清单由调用者负责。
+    """
     d, n = config["data"], config["num_uavs"]
     if d["kind"] == "cbcl":
         records, audit = read_cbcl_records(d["root"])
@@ -338,6 +415,8 @@ def prepare_data(config: dict) -> dict:
         audit = {"synthetic": True, "regions": len(records)}
     clients, unused = partition_clients(train, records, config)
     capacity = len(clients[0])
+    # 第 i 个样本在 (i+1)/rate 到达；start_s 取第 initial 个样本的到达时刻。
+    # “初始 10%”属于同一条采集序列，不会额外创建或重复计算这些样本。
     initial = max(1, math.floor(capacity * d["initial_fraction"]))
     release = np.arange(1, capacity + 1, dtype=float) / d["rate_per_s"]
     if d["fixed_epoch_counts"] is not None and max(d["fixed_epoch_counts"]) > capacity:
@@ -357,7 +436,12 @@ def prepare_data(config: dict) -> dict:
 
 
 def epoch_snapshot(data: dict, physical_s: float, epoch: int, config: dict) -> dict:
-    """纯函数：返回轮初固定样本数/各机索引。轮内新样本只在下一次调用中出现。"""
+    """纯函数：返回轮初固定样本数/各机索引；epoch 从 1 开始编号。
+
+    physical_s 是仿真物理时刻。searchsorted(..., side='right') 包含恰在轮初
+    到达的样本；返回的 indices 是新列表，所以之后释放新样本不会改变本轮。
+    fixed_epoch_counts 仅供共同快照消融，会显式替代物理释放计数。
+    """
     fixed = config["data"]["fixed_epoch_counts"]
     count = fixed[epoch - 1] if fixed is not None else int(np.searchsorted(data["release_s"], physical_s, side="right"))
     if not 1 <= count <= data["capacity"]:
@@ -397,7 +481,14 @@ def block_name(index: int) -> str:
 
 
 def initialize_model(config: dict, require_pretrained: bool = False) -> tuple[dict, dict]:
-    """返回 Model 和初始化来源；无 nn.Module/全局 RNG/隐式权重下载。"""
+    """返回 (Model, provenance)，构造可按残差块边界执行的函数式 ResNet18。
+
+    params 保存可训练叶子 Tensor；buffers 保存固定 BN 均值、方差和计数项。
+    参数名称采用标准 torchvision 键，使官方 state_dict 可以直接映射。
+    require_pretrained=True 用于正式训练：没有 checkpoint 且未显式允许随机
+    初始化就报错；False 允许为成本画像创建模型。初始化使用局部随机生成器。
+    provenance 记录文件哈希、分类头重建情况和旧 BN 兼容项，供实验追溯。
+    """
     import torch
     params, buffers = {}, {}
     generator = torch.Generator(device="cpu").manual_seed(config["seed"])
@@ -512,17 +603,27 @@ def prefix_keys(model: dict, split: int) -> list[str]:
 
 
 def split_gradients(model: dict, images: Any, labels: Any, split: int) -> tuple[dict, dict]:
-    """显式 detach/传激活/返梯度；返回全模型梯度字典和批次统计，不更新参数。"""
+    """显式模拟分割学习，返回 (全模型梯度字典, 批次统计)，不更新参数。
+
+    images 为 float32 [B,3,H,W]，labels 为 int64 [B]，split 为 0..8。
+    梯度字典键与 model['params'] 相同；loss 是批次平均交叉熵，correct 是
+    正确样本数，通信量按本批实际 Tensor 大小计 bit，上传还包含标签。
+    autograd.grad 直接返回梯度，不向参数 .grad 累积，函数间没有残留梯度状态。
+    """
     import torch
     from torch.nn import functional as F
     left = prefix_keys(model, split)
     right = [name for name in model["params"] if name not in set(left)]
     boundary = forward_prefix(model, images, split)
+    # boundary 保留客户端计算图；received 是服务器收到的独立叶子激活。
+    # detach 阻断跨端自动求导，后面必须显式把 dLoss/dActivation 传回客户端。
     received = boundary.detach().clone().requires_grad_(True)
     logits = forward_suffix(model, received, split)
     loss = F.cross_entropy(logits, labels)
     if not bool(torch.isfinite(loss)):
         raise FloatingPointError("批次损失非有限，停止本轮训练")
+    # 先取得服务器后缀参数梯度及激活梯度，再用激活梯度求客户端前缀梯度。
+    # 此时两端参数都没有更新，保持与完整模型同一更新前状态的梯度关系。
     server_grad = torch.autograd.grad(loss, [model["params"][name] for name in right] + [received])
     client_grad = torch.autograd.grad(boundary, [model["params"][name] for name in left], grad_outputs=server_grad[-1].detach())
     grads = dict(zip(left, client_grad)) | dict(zip(right, server_grad[:-1]))
@@ -543,7 +644,13 @@ def sgd_step(model: dict, gradients: dict, step: float) -> dict:
 
 def train_client_epoch(model: dict, data: dict, indices: list[int], split: int,
                        epoch: int, uid: int, config: dict) -> tuple[dict, dict]:
-    """遍历一次冻结快照；返回新 Model 与加权统计，尾批步长按真实大小计算。"""
+    """遍历一次冻结快照，返回 (新 Model, 本轮统计)，尾批按真实大小计算。
+
+    indices 必须是当前 UAV 的轮初快照，函数不会查询中途新释放的样本。
+    epoch 为 1 起始轮号，uid 为 0 起始设备号，两者决定独立可复现的 batch 顺序。
+    loss/accuracy 按样本数加权；step_sum 应等于 epoch_step_size；通信量是
+    本轮激活/标签和梯度的累计 bit，不包含由系统聚合阶段单独计量的前缀参数。
+    """
     rng = np.random.default_rng(np.random.SeedSequence([config["seed"], epoch, uid]))
     order = rng.permutation(indices).tolist()
     state, loss_sum, correct, step_sum, up, down = model, 0.0, 0, 0.0, 0, 0
@@ -552,6 +659,8 @@ def train_client_epoch(model: dict, data: dict, indices: list[int], split: int,
         batch = order[offset:offset + batch_size]
         x, y = load_batch(data, batch, config["training"]["device"])
         gradients, metrics = split_gradients(state, x, y, split)
+        # 每个样本对本轮累计步长的权重相同；例如 D=3、batch_size=2 时，
+        # 两批使用 2*eta/3 和 eta/3，数据增长不会自动扩大整轮累计步长。
         step = config["training"]["epoch_step_size"] * len(batch) / len(order)
         state = sgd_step(state, gradients, step)
         loss_sum += metrics["loss"] * len(batch)
@@ -564,7 +673,12 @@ def train_client_epoch(model: dict, data: dict, indices: list[int], split: int,
 
 
 def aggregate_models(models: list[dict], counts: list[int]) -> dict:
-    """式(5)：完整模型按样本数平均，返回新 Model；固定 BN buffers 必须一致。"""
+    """式(5)：按 counts 加权平均完整模型，返回新 Model，不修改各分支。
+
+    不同切点只是同一完整参数字典的执行分界，所以可以按同名参数直接平均。
+    本研究各机样本数相同，权重退化为 1/N；保留 counts 接口便于核验通用情况。
+    BN 统计量冻结且应完全一致，检查通过后共享 buffers，不对计数做浮点平均。
+    """
     import torch
     if len(models) != len(counts) or not models or min(counts) <= 0:
         raise ValueError("聚合模型数/权重不合法")
@@ -687,7 +801,14 @@ def shannon_rate(bandwidth_hz: Any, power_w: Any, gain: Any, noise_psd: float) -
 
 def make_problem(epoch: int, count: int, gain: Any, split: Any, next_split: Any,
                  remaining_j: Any, config: dict) -> dict:
-    """构造单 epoch Problem；聚合轮必须先确定下一周期切分，末轮必须为 None。"""
+    """构造当前 epoch 的独立 Problem，供成本计算与资源优化共用。
+
+    count 为每机本轮冻结样本数 D_k；gain、split、remaining_j 均为长度 N。
+    split 是本轮执行的切点，next_split 只决定聚合后新前缀的下发负载。
+    非最终偶数轮必须传 next_split；奇数轮和最终轮必须传 None。这样可以在
+    P2 求解前确定所有通信量，避免求解后才切换模型造成时延/能耗漏算。
+    返回时复制输入数组，后续扣电量或切换切点不会修改这份问题快照。
+    """
     n, epochs = config["num_uavs"], config["training"]["epochs"]
     aggregate, final = epoch % 2 == 0, epoch == epochs
     if not 1 <= epoch <= epochs or count < 1:
@@ -714,6 +835,9 @@ def loads(problem: dict, profile: dict) -> dict:
     """返回当前轮各机周期数、训练通信量、同步通信量；最终下发严格为零。"""
     s, d = problem["split"], problem["count"]
     zero = np.zeros(len(s))
+    # 计算/激活/梯度画像按“单样本”给出，乘 D_k 后才是整轮负载。
+    # prefix_bits 已是一份完整前缀的大小，只在聚合时传一次，不再乘 D_k。
+    # upload 用当前 s；download 用 next_split，二者可能跨越不同残差块边界。
     return {"client_cycles": d * profile["client_cycles"][s], "server_cycles": d * profile["server_cycles"][s],
             "activation_bits": d * profile["activation_bits"][s], "gradient_bits": d * profile["gradient_bits"][s],
             "upload_bits": profile["prefix_bits"][s] if problem["aggregate"] else zero,
@@ -721,7 +845,13 @@ def loads(problem: dict, profile: dict) -> dict:
 
 
 def evaluate_resources(problem: dict, resources: dict, profile: dict, config: dict) -> dict:
-    """用原式(10)—(17)重算时延、能耗和载荷；各同步阶段分别取 max 后相加。"""
+    """用原式(10)—(17)计算真实模型成本，返回可直接记录的 metrics 字典。
+
+    Resources 的 frequency_hz/power_w/up_hz/down_hz 均为长度 N 的物理量数组。
+    duration_s、total_energy_j、server_energy_j 为标量；uav_energy_j、各链路
+    速率及 components 中各能耗项为长度 N 的数组；stage_times 为阶段标量。
+    此处的“真实”指原始数学模型值，用来核验凸上界解，不是硬件功耗实测。
+    """
     l = loads(problem, profile)
     f, p = resources["frequency_hz"], resources["power_w"]
     e, u, c = config["server"], config["uav"], config["channel"]
@@ -734,10 +864,14 @@ def evaluate_resources(problem: dict, resources: dict, profile: dict, config: di
                   "server_compute_j": e["kappa"] * e["frequency_hz"] ** 2 * l["server_cycles"],
                   "gradient_download_j": e["downlink_power_w"] * tg,
                   "prefix_download_j": e["downlink_power_w"] * td}
+    # UAV 电池只扣本地计算和两类上行；下行发射能耗属于服务器。
+    # 聚合处理能耗为服务器侧一次性开销，不分摊进各 UAV 的训练电池。
     uav_energy = components["uav_compute_j"] + components["activation_upload_j"] + components["prefix_upload_j"]
     agg_time = e["aggregation_time_s"] if problem["aggregate"] else 0.0
     agg_energy = e["aggregation_energy_j"] if problem["aggregate"] else 0.0
     server_energy = float(sum(np.sum(components[k]) for k in ("server_compute_j", "gradient_download_j", "prefix_download_j")) + agg_energy)
+    # 同步屏障使每阶段都要等待该阶段最慢分支，且各阶段最慢的 UAV 可以不同。
+    # 因而要 sum(max(stage_n))；不能把四个阶段相加后只取一次 max。
     stage_times = {"split_training_s": float(np.max(tc + te + ta + tg)), "prefix_upload_s": float(np.max(tu)),
                    "aggregation_s": agg_time, "prefix_download_s": float(np.max(td))}
     return {"duration_s": sum(stage_times.values()), "total_energy_j": float(uav_energy.sum() + server_energy),
@@ -748,7 +882,13 @@ def evaluate_resources(problem: dict, resources: dict, profile: dict, config: di
 
 
 def audit_resources(problem: dict, resources: dict, profile: dict, config: dict) -> dict:
-    """原始约束核验，返回 ok、无量纲最大违约与物理残差；不得用 solver 状态替代。"""
+    """原始约束核验，返回 ok、无量纲最大违约与带单位的物理残差。
+
+    残差按“实际值 - 上界”定义：正数表示违约，负数表示尚有余量。为让 Hz、W、
+    J、s 可以共用数值容差，分别除以对应上界，再取正部最大值。无效资源数组
+    会直接返回 ok=False/reason，不计算可能含除零的速率；调用方先读 ok。
+    求解器报告 optimal/optimal_inaccurate 后，也必须通过这一原式检查。
+    """
     n, tol = config["num_uavs"], config["optimization"]["feasibility_tolerance"]
     if any(np.shape(v) != (n,) or not np.isfinite(v).all() or np.any(np.asarray(v) <= 0) for v in resources.values()):
         return {"ok": False, "reason": "nonpositive_or_invalid_resources"}
@@ -778,15 +918,25 @@ def convex_subproblem(problem: dict, profile: dict, config: dict,
     上行上界=E_up0/psi，与式(29)—(31)完全等价，避免 y 的数量级病态。
     fixed_power != None：固定发射功率的凸 Phase-I，最小化时延/电量松弛；
     只用于寻找原问题可行点，找不到不构成全局不可行证明。
+
+    tangent 为已经验证可行的 Resources；fixed_power 是 p_max 的比例，两者
+    必须且只能提供一个。输出 ok 指原约束也已通过，而不只是求解器有数值解。
+    成功时 resources 恢复为 Hz/W，epigraph_s 恢复为秒；status/warnings 保存
+    求解器状态。失败结果可能没有 resources/audit，调用方需先检查 ok。
     """
     import cvxpy as cp
     if (tangent is None) == (fixed_power is None):
         raise ValueError("必须且只能指定 tangent 或 fixed_power")
     n, o, u, e, radio = config["num_uavs"], config["optimization"], config["uav"], config["server"], config["radio"]
     l, floor = loads(problem, profile), o["positive_floor"]
+    # 优化变量 f=f_actual/f_max，p=p_actual/p_max，bu/bd=B_actual/B_total。
+    # 都在接近 0..1 的尺度内求解，避免直接把 GHz、MHz 与 W 混入同一变量向量。
     f = cp.Variable(n, name="frequency_fraction")
     bu, bd = cp.Variable(n, name="up_fraction"), cp.Variable(n, name="down_fraction")
     p = cp.Variable(n, name="power_fraction") if tangent is not None else np.full(n, fixed_power)
+    # tau 内部是“阶段时长 / 本轮期限”的无量纲上界，返回时才乘 deadline。
+    # 奇数轮仅有 tau[0]；中间聚合轮有训练/上传/下发三项；末轮没有下发项。
+    # 固定聚合处理时长直接加入总时限，不需要额外决策变量。
     tau = cp.Variable(1 + int(problem["aggregate"]) + int(problem["next_split"] is not None), nonneg=True, name="stage_s")
     noise, gain, fmax = config["channel"]["noise_psd_w_hz"], problem["gain"], maximum_frequency(config)
     # -rel_entr(b,b+a*p)=b*log(1+a*p/b) 是联合凹的 Shannon perspective。
@@ -794,6 +944,9 @@ def convex_subproblem(problem: dict, profile: dict, config: dict,
     rd = -(radio["total_down_hz"] / 1e6) * cp.rel_entr(bd, bd + gain * e["downlink_power_w"] / (noise * radio["total_down_hz"])) / np.log(2)
     invru, invrd = cp.inv_pos(ru), cp.inv_pos(rd)
     ec = cp.multiply(u["kappa"] * l["client_cycles"] * fmax ** 2, cp.square(f))
+    # 上面的 ru/rd 用 Mbit/s，这里的载荷同步除以 1e6，除法得到的仍然是秒。
+    # 同一个 epoch 的特征通信与模型同步共享当前资源，能量项可先合并载荷；
+    # 时延项仍必须在下方按各阶段分别施加上图约束。
     up_mbit = (l["activation_bits"] + l["upload_bits"]) / 1e6
     down_mbit = (l["gradient_bits"] + l["download_bits"]) / 1e6
     constraints = [f >= floor, f <= 1, bu >= floor, bd >= floor, cp.sum(bu) <= 1, cp.sum(bd) <= 1]
@@ -801,6 +954,9 @@ def convex_subproblem(problem: dict, profile: dict, config: dict,
         m0 = evaluate_resources(problem, tangent, profile, config)
         ru0 = m0["up_rate_bps"] / 1e6
         p0 = tangent["power_w"]
+        # 在当前点 R=R0、p=p0 时 psi=1，上界 E_up0/psi 与原上行能量相切。
+        # 固定当前点后，sqrt(R/R0) 为凹函数，减去线性功率仍为凹函数；
+        # 正凹函数的倒数是凸函数，CVXPY 可按 DCP 规则处理。
         psi = 2 * cp.sqrt(cp.multiply(1 / ru0, ru)) - cp.multiply(u["power_max_w"] / p0, p)
         eup0 = up_mbit * p0 / ru0
         eup = cp.multiply(eup0, cp.inv_pos(psi))
@@ -822,8 +978,12 @@ def convex_subproblem(problem: dict, profile: dict, config: dict,
         constraints += [cp.multiply(l["download_bits"] / 1e6 / deadline, invrd) <= tau[2]]
     agg_time = e["aggregation_time_s"] if problem["aggregate"] else 0.0
     battery_scale = np.maximum(scale, np.abs(problem["remaining_j"]))
+    # 正常优化 slack=0；Phase-I 同时放宽归一化时限与每机电量，并优先压低 slack。
+    # 即使 Phase-I 找到了较小松弛，也只有 audit_resources 通过才可用作可行初值。
     constraints += [cp.sum(tau) + agg_time / deadline <= 1 + slack,
                     cp.multiply(1 / battery_scale, ec + eup) <= problem["remaining_j"] / battery_scale + slack]
+    # 固定切分时，服务器后缀计算及聚合处理能耗对本次连续变量优化是常数。
+    # 此目标省略它们以简化求解；evaluate_resources 汇总时会完整加回。
     objective = cp.sum(ec + eup + edown) / scale
     objective = objective if tangent is not None else slack + 1e-8 * objective
     program = cp.Problem(cp.Minimize(objective), constraints)
@@ -854,7 +1014,13 @@ def convex_subproblem(problem: dict, profile: dict, config: dict,
 
 
 def feasible_initialization(problem: dict, profile: dict, config: dict, previous: dict | None = None) -> dict:
-    """返回已按原约束验证的初值；参考/最大资源失败后做固定功率凸 Phase-I。"""
+    """返回 {ok, resources, attempts}；失败还包含明确的 status。
+
+    尝试顺序为上一可行配置、初始参考配置、最大频率/功率等分带宽，最后在若干
+    固定功率比例下解凸 Phase-I。每个候选均使用当前 Problem 重新审计，不能
+    因它上一轮可行就直接复用。attempts 记录全部尝试，便于区分初始化失败与
+    后续凸迭代失败。此有限初始化搜索不能提供原非凸问题的不可行证明。
+    """
     attempts = []
     for name, candidate in (("previous", previous), ("reference", reference_resources(config))):
         if candidate is None:
@@ -880,7 +1046,13 @@ def feasible_initialization(problem: dict, profile: dict, config: dict, previous
 
 
 def solve_resources(problem: dict, profile: dict, config: dict, previous: dict | None = None) -> dict:
-    """式(30)/(31)交替求解，返回 SolveResult；接受步均真实可行且真实目标不增。"""
+    """式(30)/(31)交替求解，返回 SolveResult，接受步真实可行且真实目标不增。
+
+    trace[0] 是已验证初值，此后每项记录真实能耗、相对下降、原约束审计及
+    是否接受；并非所有日志项都会被执行。ok=True 时 resources/metrics 可用于
+    本轮执行，但 status='iteration_limit_feasible' 只表示达到上限仍然可行。
+    ok=False 时返回 resources=None，由上层尝试下一候选或报告任务未完成。
+    """
     start = time.perf_counter()
     initialization = feasible_initialization(problem, profile, config, previous)
     trace = []
@@ -899,6 +1071,8 @@ def solve_resources(problem: dict, profile: dict, config: dict, previous: dict |
             trace.append({"iteration": iteration, "accepted": False, "subproblem": proposed})
             return result(False, "convex_subproblem_failed")
         candidate = proposed["resources"]
+        # 停止条件和接受条件均依据原始总能量，而不是随切线更新的凸上界目标。
+        # 分母防止能量接近零时出现除零；每步还独立通过了原始约束核验。
         metrics = evaluate_resources(problem, candidate, profile, config)
         new_energy = metrics["total_energy_j"]
         relative = (energy - new_energy) / max(abs(energy), 1e-12)
@@ -923,7 +1097,13 @@ def solve_resources(problem: dict, profile: dict, config: dict, previous: dict |
 # 6. 窗口切分、参考评分、离散可行性 --------------------------------------------
 def reference_scores(count: int, gain: np.ndarray, resources: dict, profile: dict,
                      first_cycle: bool, config: dict) -> np.ndarray:
-    """式(26)：返回 [N,9] 周期候选评分；chi 仅控制周期前新前缀下发项。"""
+    """式(26)：返回 [N,9] 参考能耗评分矩阵，元素是某机某候选的周期评分 J。
+
+    count 是决策时刻每机样本数，gain 是已完成 epoch 窗口的平均信道。
+    预测周期固定使用 m=2*count。首周期模型已预部署，chi=0；后续周期
+    chi=1，计入新前缀下发。与新切点无关的旧前缀上传和聚合常数在评分中
+    省略，但 screen_split 的可行性检查仍包括这些成本。
+    """
     u, e, noise = config["uav"], config["server"], config["channel"]["noise_psd_w_hz"]
     ru = shannon_rate(resources["up_hz"], resources["power_w"], gain, noise)[:, None]
     rd = shannon_rate(resources["down_hz"], e["downlink_power_w"], gain, noise)[:, None]
@@ -937,7 +1117,12 @@ def reference_scores(count: int, gain: np.ndarray, resources: dict, profile: dic
 def screen_split(candidate: np.ndarray, current: np.ndarray, epoch: int, count: int,
                  gain: np.ndarray, remaining_j: np.ndarray, reference: dict,
                  profile: dict, config: dict) -> dict:
-    """式(25)：检验前一未执行聚合轮 + 下一两轮，含全部同步开销和累计电量。"""
+    """式(25)：返回参考预测范围的可行性、各轮时长、累计每机能耗及拒绝原因。
+
+    首周期检查 epoch=1,2；在 epoch=2 预选下一周期时，检查当前未执行的
+    聚合轮 2 和未来训练轮 3,4。整个范围固定当前 count 和窗口信道，属于
+    参考预测，不读取未来真实 D(t)/h(t)。电池约束按范围内累计能耗检查。
+    """
     first = epoch == 1
     start = 1 if first else epoch + 1
     horizon = []
@@ -963,6 +1148,11 @@ def select_splits(epoch: int, count: int, current: np.ndarray, gain_history: lis
 
     优先保留可行原切分；否则按评分用堆枚举组合寻找初值。之后逐机枚举九点，
     严格下降且参考可行才接受，同分保留原值。枚举达上限会明确报告，非全局证书。
+
+    epoch 只能由主流程在首轮或非最终聚合轮传入；current 是目前使用的向量，
+    candidates 则是待进入周期的候选向量。返回队列的首项为坐标搜索结果；
+    其余已发现的参考可行组合按分数排序，供真实当前信道下的 P2 依次尝试。
+    scores_j 为 [N,9]，window_gain 为 [N]；trace 记录枚举和被接受的变化。
     """
     o, n = config["optimization"], config["num_uavs"]
     window = 1 if o["strategy"] == "no_window" else o["window_epochs"]
@@ -996,6 +1186,9 @@ def select_splits(epoch: int, count: int, current: np.ndarray, gain_history: lis
     searched = 0
     if not initial_audit["ok"]:
         orders = np.argsort(scores, axis=1, kind="stable")
+        # ranks[i] 表示第 i 架机候选的“评分排名”，不是残差块切点编号。
+        # 从各机最便宜的组合出发，每次只提高一机的排名；小根堆按总分弹出，
+        # visited 防止不同搜索路径重复访问同一组合，避免预先构造 9**N 个向量。
         ranks = (0,) * n
         decode = lambda r: np.array([orders[i, r[i]] for i in range(n)], dtype=int)
         heap, visited = [(score(decode(ranks)), ranks)], {ranks}
@@ -1023,6 +1216,8 @@ def select_splits(epoch: int, count: int, current: np.ndarray, gain_history: lis
     for sweep in range(o["max_coordinate_sweeps"]):
         improved = False
         for uid in range(n):
+            # 一次只修改一架 UAV，其余位置固定；每个候选仍需检查全系统时限。
+            # score_tolerance_j 要求严格下降，避免同分切换和数值误差造成循环。
             best, best_score = chosen.copy(), score(chosen)
             for cut in range(9):
                 trial = chosen.copy()
@@ -1089,6 +1284,12 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
 
     train=False 只执行物理成本仿真；train=True 在资源通过原约束后执行真实 SGD。
     服务器并行分支在本地串行模拟，不把本机墙钟时间计作系统模型时间。
+
+    data/profile 可传入准备好的 Data/Profile，否则在本次运行中生成；output
+    是本次运行的新目录，已有 config.json 时拒绝覆盖。函数内部写日志和模型。
+    返回的 summary/history 可用于进一步分析；Model 对象保留在内存返回值中。
+    只有训练且全部轮次完成时 final_model 才非 None；best_model 仅按验证集选取。
+    单轮可行不等于任务必然完成，调用者应先检查 summary['completed']。
     """
     import torch
     config = validate_config(config)
@@ -1123,9 +1324,14 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
     failure, total_energy, processed = None, 0.0, 0
     try:
         for epoch in range(1, epochs + 1):
+            # 第一步：只在轮初冻结 D_k、样本索引和当前链路状态。后续各批次
+            # 共用本轮决策资源；本机求解/训练花费的墙钟时间不改变此物理快照。
             snapshot = epoch_snapshot(data, time_s, epoch, config)
             channel = channel_at(time_s, config)
             selection = None
+            # 第二步：首轮确定当前切分；非最终偶数轮预选“下一周期”的切分。
+            # 预选提前到当前聚合轮开始，是为了在 P2 求解前确定新前缀下发量。
+            # 此时 current 仍用于本轮训练，直到该轮训练与聚合完成后才切换。
             if dynamic and (epoch == 1 or (epoch % 2 == 0 and epoch < epochs)):
                 selection = select_splits(epoch, snapshot["count"], current, gain_history, channel["gain"], remaining,
                                           reference, profile, config)
@@ -1142,11 +1348,15 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
                     break
                 if epoch == 1:
                     current = selection["candidates"][0].copy()
+            # 非聚合轮和最终轮不下发新前缀，因此传 None；固定切分策略也需在
+            # 中间聚合轮传 current，表示聚合后按同一切点重新下发参数。
             if epoch % 2 == 0 and epoch < epochs:
                 queue = selection["candidates"] if dynamic else [current.copy()]
             else:
                 queue = [None]
             attempts, solved, problem = [], None, None
+            # 第三步：在真实当前信道下尝试候选并求 P2。参考筛选负责产生队列，
+            # 不能代替实际时限/电池审计；任何候选都不可行时，在更新模型前停止。
             for q in queue:
                 problem = make_problem(epoch, snapshot["count"], channel["gain"], current, q, remaining, config)
                 if strategy == "fixed_fixed":
@@ -1167,6 +1377,9 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
             metrics, train_metrics, validation = solved["metrics"], None, None
             training_wall = time.perf_counter()
             if train:
+                # 第四步：每机从上一轮分支状态执行一次完整本地 epoch。
+                # 新参数先放入 next_branches，所有分支完成后才接替 branches；
+                # 无聚合的奇数轮保留各机独立参数，下一轮继续训练这些参数。
                 next_branches, train_metrics = [], []
                 for uid in range(n):
                     new_model, stats = train_client_epoch(branches[uid], data, snapshot["indices"][uid], int(current[uid]), epoch, uid, config)
@@ -1176,6 +1389,9 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
                     next_branches.append(new_model)
                     train_metrics.append(stats)
                 if problem["aggregate"]:
+                    # 聚合完整参数，随后各分支从同一个新全局模型继续。参数只读
+                    # 共享是安全的，因为下一个 sgd_step 会返回新参数而不原地改写。
+                    # 最佳模型只看验证准确率；同分保持先前模型，测试集在末尾使用。
                     new_global = aggregate_models(next_branches, [snapshot["count"]] * n)
                     validation = evaluate_model(new_global, data, data["val"], config)
                     global_model, last_aggregation = new_global, epoch
@@ -1196,6 +1412,9 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
             history.append(row)
             if problem["aggregate"]:
                 last_aggregation = epoch
+            # 第五步：该轮成功后按模型时延推进物理时间、扣除 UAV 训练电量，
+            # 再把本轮信道加入“已完成”窗口。新增样本直到下次 snapshot 才参与。
+            # 保留最近一次实际可行资源作下次参考，且在聚合后才应用 next_split。
             remaining = row["remaining_after_j"].copy()
             time_s = row["end_s"]
             total_energy += metrics["total_energy_j"]
@@ -1228,6 +1447,8 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
                "code_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。"}
     if train and last_aggregation:
+        # 这里已离开训练循环，测试集从未参与选模。未完成时的“最近聚合模型”
+        # 仍可供诊断，但不会被标记为完成任务的 final_model。
         summary["last_aggregated_test"] = evaluate_model(global_model, data, data["test"], config)
         summary["best_validation_model_test"] = evaluate_model(best_model, data, data["test"], config)
         if config["training"]["save_checkpoint"]:
@@ -1352,7 +1573,13 @@ def verify_implementation(config: dict) -> dict:
 
 
 def main() -> int:
-    """命令行适配层；成功返回 0，协议验证/运行错误返回 1，任务未完成返回 2。"""
+    """命令行适配层；成功返回 0，协议验证/运行错误返回 1，任务未完成返回 2。
+
+    参数优先级：default_config() < --config JSON < CLI 显式覆盖。
+    smoke 再覆盖其诊断规模、随机初始化和保存选项；check 使用固定小规模测试。
+    prepare/profile 写准备结果，simulate/train 调同一主流程并以 train 标志
+    决定是否更新神经网络。--output 指定结果目录，--checkpoint 指向已有权重。
+    """
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["config", "prepare", "profile", "simulate", "train", "check", "smoke"])
     parser.add_argument("--config", help="JSON 局部参数覆盖文件")

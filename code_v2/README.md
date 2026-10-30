@@ -1,31 +1,68 @@
 # 动态 UAV-SFL · code_v2
 
-所有参数、数据准备、环境、优化、ResNet18、训练和检查均在 **`uav_sfl.py` 一个代码文件**。没有项目内部跨文件依赖，也不导入 v0/v1。实现依据为 [Notion 动态UAV-SFL](https://app.notion.com/p/3b5427f94a0b8040a213d5d9b277c8df)，源页面编辑时间为北京时间 **2026-10-30 02:45:37**，完整读取快照保存在 `notion_source.md`。
+## 运行指令（Windows PowerShell）
 
-## 先运行
-
-本机已检查 `code_v1/.venv` 具备所需依赖，可以直接复用解释器：
+先执行下面两行，进入目录并选用本机已有的 Python 环境：
 
 ```powershell
 cd E:\Work1SFL\code\code_v2
-& '..\code_v1\.venv\Scripts\python.exe' -X utf8 -B uav_sfl.py config
-& '..\code_v1\.venv\Scripts\python.exe' -X utf8 -B uav_sfl.py check
-& '..\code_v1\.venv\Scripts\python.exe' -X utf8 -B uav_sfl.py smoke
+$sflPython = (Resolve-Path '..\code_v1\.venv\Scripts\python.exe').Path
 ```
 
-`check` 验证数学/训练协议；`smoke` 使用两机、4 epoch、32×32 合成图像执行真实反向传播、资源优化和两次完整聚合。它是诊断，不能作为 CBCL 准确率实验。
+首次运行，先执行小规模诊断：
 
-在新电脑中安装：
+```powershell
+& $sflPython -X utf8 -B .\uav_sfl.py smoke
+```
+
+使用本目录已准备的 ResNet18 权重进行正式训练：
+
+```powershell
+& $sflPython -X utf8 -B .\uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
+```
+
+仅计算资源配置、物理时延和能耗时，选择：
+
+```powershell
+& $sflPython -X utf8 -B .\uav_sfl.py simulate
+```
+
+以上命令**不需要示例 JSON**，直接读取 `uav_sfl.py` 的 `default_config()`。`-X utf8` 使用 UTF-8 编码，`-B` 避免生成 Python 字节码缓存；`--checkpoint` 是本地预训练文件的位置。各命令可独立运行，不必先执行 `prepare` 或 `profile`，主流程会生成所需数据结构。
+
+`smoke` 使用两机、4 epoch、32×32 合成图像执行真实反向传播、资源优化和两次完整聚合，显式使用随机初始化，供运行检查。`train` 默认计划 100 epoch，使用真实 CBCL 数据和指定预训练骨干；九分类头重新初始化。`simulate` 执行同样的资源决策和物理时间推进，但不进行模型参数更新。
+
+**运行前需要确认的策略参数：**默认 `reference_recovery="none"` 保留文稿严格筛选，样本增长后可能返回参考无解。要使用已提供的参考资源重建扩展，在 `default_config()` 的 `optimization` 中改成 `"rebuild"`；这是需要在实验方法中说明的额外策略，具体边界见下文。更换权重路径不会改变这一资源筛选行为。
+
+结果保存到 `code_v2/output/<模式>_<时间>_seed.../`，终端会打印实际目录。先打开 `summary.json` 查看 `completed` 和 `failure`，再看 `history.csv` 的逐轮指标；`decisions.jsonl` 包含候选筛选和求解过程。PowerShell 的 `$LASTEXITCODE` 为 0 表示成功，1 表示输入/执行错误，2 表示任务未完成。
+
+其他入口按需运行：
+
+| 用途 | 在上述 PowerShell 会话中执行 | 主要结果 |
+|---|---|---|
+| 查看参数 | `& $sflPython -X utf8 -B .\uav_sfl.py config` | 打印完整参数和训练预算，不训练 |
+| 验证实现 | `& $sflPython -X utf8 -B .\uav_sfl.py check` | 梯度、约束、尾批和聚合检查报告 |
+| 准备数据 | `& $sflPython -X utf8 -B .\uav_sfl.py prepare` | 独立场景划分、客户端序列和释放表 |
+| 生成画像 | `& $sflPython -X utf8 -B .\uav_sfl.py profile` | 九个切分点的计算/通信画像 |
+| 查看帮助 | `& $sflPython -X utf8 -B .\uav_sfl.py --help` | 子命令、路径和覆盖参数说明 |
+
+## 项目与环境
+
+所有参数、数据准备、环境、优化、ResNet18、训练和检查均在 **`uav_sfl.py` 一个代码文件**。没有项目内部跨文件依赖，也不导入 v0/v1。实现依据为 [Notion 动态UAV-SFL](https://app.notion.com/p/3b5427f94a0b8040a213d5d9b277c8df)，源页面编辑时间为北京时间 **2026-10-30 02:45:37**，完整读取快照保存在 `notion_source.md`。
+
+新电脑通常没有本机 `code_v1/.venv` 环境。在 `code_v2` 目录内安装依赖并选用新解释器：
 
 ```powershell
 python -m venv .venv
 & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
-& '.\.venv\Scripts\python.exe' -X utf8 -B uav_sfl.py smoke
+$sflPython = (Resolve-Path '.\.venv\Scripts\python.exe').Path
+& $sflPython -X utf8 -B .\uav_sfl.py smoke
 ```
 
 Python 3.10+；CPU 可运行，GPU 环境需安装与设备匹配的 PyTorch。无需 torchvision。
 
-## 正式使用
+## 可选参数覆盖
+
+需要在多组实验间切换参数时，可以使用 JSON 局部覆盖；删除示例配置不会影响前面的无 JSON 命令。下列命令中的 `python` 必须指向已安装依赖的环境，在本机可替换为 `& $sflPython`。
 
 ```powershell
 # 按场景准备数据清单、等量客户端序列和完整释放时间表
@@ -37,16 +74,16 @@ python -X utf8 -B uav_sfl.py profile --config example_config.json
 # 仅仿真资源/能耗，不更新神经网络参数
 python -X utf8 -B uav_sfl.py simulate --config example_config.json
 
-# 同时执行资源决策与真实训练，读取本目录已准备的官方预训练 checkpoint
-python -X utf8 -B uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
+# 在同一份覆盖配置下进行真实训练，仍显式提供预训练 checkpoint
+python -X utf8 -B uav_sfl.py train --config example_config.json --checkpoint .\resnet18-f37072fd.pth
 
 # 显式启用参考资源重建扩展，4 epoch 物理成本诊断
 python -X utf8 -B uav_sfl.py simulate --config reference_rebuild_example.json
 ```
 
-上述 `python` 应指向已安装依赖的解释器。本机可替换为 `& '..\code_v1\.venv\Scripts\python.exe'`。
-
 `default_config()` 是唯一默认参数表；`example_config.json` 只是局部覆盖示例。相对数据路径和 checkpoint 路径相对配置文件，默认输出锚定本目录。`--output` 指定本次实验的新目录，已有实验不覆盖。
+
+覆盖优先级为：`default_config()` → `--config` JSON → 显式命令行参数。比如 JSON 中 `checkpoint` 为 `null`，而命令行提供了 `--checkpoint`，则以命令行路径为准。`smoke` 还会覆盖自己的诊断规模、步长、随机初始化及模型保存选项；`check` 使用固定的小规模验证配置。
 
 正式 `train` 默认要求提供预训练模型，不会静默下载、随机初始化或冒称已有预训练权重。支持标准 ResNet18 的 `state_dict`、`{"state_dict": ...}` 或本程序保存的 `{"params": ..., "buffers": ...}`；ImageNet 分类头维数不符时，保留预训练骨干并用统一种子重建九分类头，记录 `head_reinitialized`。v1 自定义 `residual_blocks.block*` 格式未做自动转换。只有显式 `--allow-random-init` 才允许随机初始化实验。
 
@@ -90,6 +127,18 @@ print(result["summary"]["system_energy_j"])
 ```
 
 数组按 UAV 编号 0..N−1 排列。代码头部列出所有核心数据结构，各函数 docstring 说明输入和返回。`Model.params` 与 `Model.buffers` 中的 Tensor 作为只读输入使用；调用方也不应原地改写共享 buffers。
+
+阅读代码时，可以沿着下面的调用顺序对照注释：
+
+1. `main` 读取参数并选择模式；`run_experiment` 准备数据、初始模型及画像。
+2. 每轮先由 `epoch_snapshot` 和 `channel_at` 冻结本轮数据与信道，再由 `select_splits` 在适用的聚合边界生成切点候选。
+3. `make_problem` 明确本轮与下一周期的切点、全部载荷和剩余电量；`solve_resources` 找可行初值并交替求凸子问题；`audit_resources` 用原公式核验。
+4. 可行资源确定后，`train_client_epoch` 返回各分支新模型；偶数轮通过 `aggregate_models` 得到全局模型，并用验证集选择最佳模型。
+5. 本轮执行成功后才推进物理时钟、扣除电量、更新已完成信道窗口和下一周期切点，再进入下一轮。
+
+三个容易混淆的量在代码中分别保存：`count` 是**每机本轮训练样本数**，`processed_samples` 是**所有轮次所有机器的累计处理次数**；`duration_s` 是**系统模型预测时延**，`training_wall_s`/`solver_wall_s` 是**本机执行耗时**；`split` 是**本轮切点**，`next_split` 是**本轮聚合后要下发的新前缀切点**。最后一轮的 `next_split=None`，避免额外下发。
+
+资源优化结果应先读 `ok` 再取 `resources`。`ok=True` 表示当前返回点通过原约束检查；是否已收敛还要看 `status`。例如 `iteration_limit_feasible` 可以执行当前轮，但只表示达到迭代上限时仍可行。完整任务是否完成应看 `RunResult.summary.completed`，不能用某一轮的 `ok` 代替。
 
 ## 与 Notion 的对应
 
