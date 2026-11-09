@@ -1,0 +1,13 @@
+{
+  "mode": "prepare",
+  "status": "completed",
+  "started_at": "2026-11-09T23:08:46.178299+08:00",
+  "finished_at": "2026-11-09T23:08:47.876071+08:00",
+  "output_dir": "E:\\Work1SFL\\code\\code_v2\\output\\output_20261109_230846_177951_a7795a664230_dirty_src9a281611_prepare_seed42",
+  "code_version": {
+    "git_commit": "a7795a664230dfdb9581e70a213eac7d82f0e8be",
+    "git_dirty": true,
+    "source_sha256": "9a281611d1b8c6c79b9a4f61a8ecee0b06cf981f14b88ba4505045ee4465fd44"
+  },
+  "wall_s": 1.6972213999833912
+}

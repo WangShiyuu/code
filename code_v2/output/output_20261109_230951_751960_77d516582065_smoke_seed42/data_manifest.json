@@ -1,0 +1,234 @@
+{
+  "kind": "synthetic",
+  "records": [
+    {
+      "id": "synthetic_0",
+      "scene": "synthetic_0",
+      "label": 0
+    },
+    {
+      "id": "synthetic_1",
+      "scene": "synthetic_1",
+      "label": 1
+    },
+    {
+      "id": "synthetic_2",
+      "scene": "synthetic_2",
+      "label": 2
+    },
+    {
+      "id": "synthetic_3",
+      "scene": "synthetic_3",
+      "label": 3
+    },
+    {
+      "id": "synthetic_4",
+      "scene": "synthetic_4",
+      "label": 4
+    },
+    {
+      "id": "synthetic_5",
+      "scene": "synthetic_5",
+      "label": 5
+    },
+    {
+      "id": "synthetic_6",
+      "scene": "synthetic_6",
+      "label": 6
+    },
+    {
+      "id": "synthetic_7",
+      "scene": "synthetic_7",
+      "label": 7
+    },
+    {
+      "id": "synthetic_8",
+      "scene": "synthetic_8",
+      "label": 8
+    },
+    {
+      "id": "synthetic_9",
+      "scene": "synthetic_9",
+      "label": 0
+    },
+    {
+      "id": "synthetic_10",
+      "scene": "synthetic_10",
+      "label": 1
+    },
+    {
+      "id": "synthetic_11",
+      "scene": "synthetic_11",
+      "label": 2
+    },
+    {
+      "id": "synthetic_12",
+      "scene": "synthetic_12",
+      "label": 3
+    },
+    {
+      "id": "synthetic_13",
+      "scene": "synthetic_13",
+      "label": 4
+    },
+    {
+      "id": "synthetic_14",
+      "scene": "synthetic_14",
+      "label": 5
+    },
+    {
+      "id": "synthetic_15",
+      "scene": "synthetic_15",
+      "label": 6
+    },
+    {
+      "id": "synthetic_16",
+      "scene": "synthetic_16",
+      "label": 7
+    },
+    {
+      "id": "synthetic_17",
+      "scene": "synthetic_17",
+      "label": 8
+    },
+    {
+      "id": "synthetic_18",
+      "scene": "synthetic_18",
+      "label": 0
+    },
+    {
+      "id": "synthetic_19",
+      "scene": "synthetic_19",
+      "label": 1
+    },
+    {
+      "id": "synthetic_20",
+      "scene": "synthetic_20",
+      "label": 2
+    },
+    {
+      "id": "synthetic_21",
+      "scene": "synthetic_21",
+      "label": 3
+    }
+  ],
+  "clients": [
+    [
+      7,
+      2,
+      14,
+      15
+    ],
+    [
+      11,
+      10,
+      8,
+      13
+    ],
+    [
+      1,
+      5,
+      12,
+      9
+    ],
+    [
+      4,
+      6,
+      0,
+      3
+    ]
+  ],
+  "val": [
+    16,
+    17,
+    18
+  ],
+  "test": [
+    19,
+    20,
+    21
+  ],
+  "unused_train": [],
+  "release_s": [
+    0.0,
+    0.0,
+    855.0,
+    1710.0
+  ],
+  "start_s": 0.0,
+  "release_plan": {
+    "mode": "periodic_capture",
+    "initial_count": 2,
+    "target_s": 1710.0,
+    "sample_interval_s": 855.0,
+    "samples_per_capture": 1,
+    "captures": 2,
+    "full_release_s": 1710.0
+  },
+  "capacity": 4,
+  "classes": [
+    "bicycle",
+    "building",
+    "car",
+    "pedestrian",
+    "road",
+    "sidewalk",
+    "sky",
+    "store",
+    "tree"
+  ],
+  "audit": {
+    "synthetic": true,
+    "regions": 22
+  },
+  "class_counts": [
+    [
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1,
+      1,
+      0
+    ],
+    [
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1
+    ],
+    [
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      0
+    ]
+  ],
+  "image_size": 32,
+  "root": "E:\\Work1SFL\\DataSet\\CBCL StreetScenes",
+  "seed": 42,
+  "fingerprint": "5e53faa2483c2a24f3a6148ad811de21fa47cd7466be745daa9e814b3e647b20"
+}

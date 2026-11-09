@@ -1,0 +1,16 @@
+{
+  "mode": "smoke",
+  "status": "completed",
+  "started_at": "2026-11-09T23:09:51.752230+08:00",
+  "finished_at": "2026-11-09T23:09:57.028733+08:00",
+  "output_dir": "E:\\Work1SFL\\code\\code_v2\\output\\output_20261109_230951_751960_77d516582065_smoke_seed42",
+  "code_version": {
+    "git_commit": "77d516582065e01d45d1399144067d99a2c9a982",
+    "git_dirty": false,
+    "source_sha256": "3ec29d4a854960e7e1cc3ed909ec82f48ec40c4388d0f378f8a9dc93f1819c5f"
+  },
+  "epochs_completed": 4,
+  "epochs_planned": 4,
+  "failure": null,
+  "wall_s": 5.276187200041022
+}
