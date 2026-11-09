@@ -17,7 +17,7 @@ $sflPython = (Resolve-Path '.\.venv\Scripts\python.exe').Path
 & $sflPython -X utf8 -B .\uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
 ```
 
-正式训练和仿真的结果默认写入 `code_v2/output/` 下的独立目录，实际生效的参数保存为 `config.json`。数据准备、纯成本仿真、异构硬件配置和 `--output` 覆盖方法见 [v2 运行说明](code_v2/README.md)。
+正式训练和仿真的结果默认写入 `code_v2/output/output_北京时间_代码哈希_运行模式_seed种子/`，实际生效参数保存为 `config.json`，运行状态和代码版本保存在 `run.json`。数据准备、纯成本仿真、异构硬件配置和 `--output` 覆盖方法见 [v2 运行说明](code_v2/README.md)。
 
 - `code_v0/`：旧代码完整归档。
 - [`code_v1/`](code_v1/README.md)：统一数据与环境，以及周期切分、块级资源优化和实际 SFL 训练。

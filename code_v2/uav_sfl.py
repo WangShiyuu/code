@@ -65,6 +65,7 @@ import argparse
 from concurrent.futures import ProcessPoolExecutor
 import copy
 import csv
+from contextlib import contextmanager
 import hashlib
 from itertools import product
 from functools import partial
@@ -73,6 +74,7 @@ import importlib.metadata
 import json
 import math
 import platform
+import subprocess
 import sys
 import time
 import warnings
@@ -1367,12 +1369,73 @@ def rebuild_reference(epoch: int, count: int, current: np.ndarray, window_gain: 
 
 
 # 7. 联合仿真/训练流程与结果保存 -------------------------------------------------
-def make_output_directory(config: dict, label: str) -> Path:
+def code_version() -> dict:
+    """记录当前提交与实际源码哈希，Git 不可用时仍可追溯源码。"""
+    source_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    commit, dirty = None, None
+    try:
+        result = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, check=True, timeout=5)
+        commit = result.stdout.strip()
+        result = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain",
+                                 "--untracked-files=normal", "--", ".", ":(exclude)output/**"],
+                                capture_output=True, text=True, check=True, timeout=5)
+        dirty = bool(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"git_commit": commit, "git_dirty": dirty, "source_sha256": source_sha}
+
+
+def make_output_directory(config: dict, label: str, version: dict | None = None) -> Path:
     """I/O：按北京时间创建唯一目录，不覆盖已有实验。"""
+    version = code_version() if version is None else version
     stamp = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d_%H%M%S_%f")
-    output = Path(config["output_root"]) / f"{label}_{stamp}_seed{config['seed']}"
+    tag = version["git_commit"][:12] if version["git_commit"] else "src" + version["source_sha256"][:12]
+    if version["git_dirty"]:
+        tag += "_dirty_src" + version["source_sha256"][:8]
+    output = Path(config["output_root"]) / f"output_{stamp}_{tag}_{label}_seed{config['seed']}"
     output.mkdir(parents=True, exist_ok=False)
     return output
+
+
+@contextmanager
+def experiment_output(config: dict, label: str, output: str | Path | None = None):
+    """为各入口保存参数、版本和运行状态，独占结果目录。"""
+    version = code_version()
+    directory = Path(output) if output else make_output_directory(config, label, version)
+    directory.mkdir(parents=True, exist_ok=True)
+    if (directory / "config.json").exists():
+        raise FileExistsError(f"实验目录已被使用: {directory}")
+    now = lambda: datetime.now(timezone(timedelta(hours=8))).isoformat()
+    metadata = {"mode": label, "status": "running", "started_at": now(), "finished_at": None,
+                "output_dir": str(directory.resolve()), "code_version": version}
+    # 排他创建运行记录，防止两个显式 --output 同时写入同一目录。
+    with (directory / "run.json").open("x", encoding="utf-8") as stream:
+        json.dump(metadata, stream, ensure_ascii=False, indent=2)
+    started = time.perf_counter()
+    try:
+        save_json(directory / "config.json", config)
+        (directory / "uav_sfl_snapshot.py").write_bytes(Path(__file__).read_bytes())
+        packages = {}
+        for package in ("numpy", "Pillow", "torch", "cvxpy", "clarabel"):
+            try:
+                packages[package] = importlib.metadata.version(package)
+            except importlib.metadata.PackageNotFoundError:
+                packages[package] = None
+        save_json(directory / "runtime.json", {"python": sys.version, "platform": platform.platform(),
+                                               "packages": packages, "code_version": version,
+                                               "code_sha256": version["source_sha256"]})
+        yield directory, metadata
+    except BaseException as exc:
+        metadata.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "error",
+                        error={"type": type(exc).__name__, "message": str(exc)})
+        raise
+    else:
+        if metadata["status"] == "running":
+            metadata["status"] = "completed"
+    finally:
+        metadata.update(finished_at=now(), wall_s=time.perf_counter() - started)
+        save_json(directory / "run.json", metadata)
 
 
 def checkpoint_payload(model: dict) -> dict:
@@ -1381,7 +1444,8 @@ def checkpoint_payload(model: dict) -> dict:
 
 
 def run_experiment(config: dict, train: bool = False, data: dict | None = None,
-                   profile: dict | None = None, output: str | Path | None = None) -> dict:
+                   profile: dict | None = None, output: str | Path | None = None,
+                   label: str | None = None) -> dict:
     """算法1主入口，返回 RunResult，并保存可复核的参数、轨迹、资源及训练结果。
 
     train=False 只执行物理成本仿真；train=True 在资源通过原约束后执行真实 SGD。
@@ -1393,25 +1457,19 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
     只有训练且全部轮次完成时 final_model 才非 None；best_model 仅按验证集选取。
     单轮可行不等于任务必然完成，调用者应先检查 summary['completed']。
     """
-    import torch
     config = validate_config(config)
+    with experiment_output(config, label or ("train" if train else "simulate"), output) as (directory, metadata):
+        result = execute_experiment(config, train, data, profile, directory, metadata["code_version"])
+        summary = result["summary"]
+        metadata.update(status=summary["status"], epochs_completed=summary["epochs_completed"],
+                        epochs_planned=summary["epochs_planned"], failure=summary["failure"])
+        return result
+
+
+def execute_experiment(config, train, data, profile, output, version):
+    """在已分配并存档的目录执行计算，输入/输出协议由 run_experiment 管理。"""
+    import torch
     torch.set_num_threads(config["training"]["torch_threads"])
-    output = Path(output) if output else make_output_directory(config, "train" if train else "simulate")
-    output.mkdir(parents=True, exist_ok=True)
-    if (output / "config.json").exists():
-        raise FileExistsError(f"实验目录已被使用: {output}")
-    save_json(output / "config.json", config)
-    source = Path(__file__).read_bytes()
-    (output / "uav_sfl_snapshot.py").write_bytes(source)
-    source_sha256 = hashlib.sha256(source).hexdigest()
-    packages = {}
-    for package in ("numpy", "Pillow", "torch", "cvxpy", "clarabel"):
-        try:
-            packages[package] = importlib.metadata.version(package)
-        except importlib.metadata.PackageNotFoundError:
-            packages[package] = None
-    save_json(output / "runtime.json", {"python": sys.version, "platform": platform.platform(),
-                                      "packages": packages, "code_sha256": source_sha256})
     start_wall = time.perf_counter()
     base, provenance = initialize_model(config, require_pretrained=train)
     data = prepare_data(config) if data is None else data
@@ -1558,7 +1616,7 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
                "last_aggregation_epoch": last_aggregation, "initialization": provenance,
                "data_fingerprint": data["fingerprint"], "hardware_profile_measured": profile["metadata"]["hardware_measured"],
                "failure": failure, "wall_s": time.perf_counter() - start_wall,
-               "code_sha256": source_sha256,
+               "code_sha256": version["source_sha256"], "code_version": version,
                "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。"}
     if train and last_aggregation:
         # 这里已离开训练循环，测试集从未参与选模。未完成时的“最近聚合模型”
@@ -1571,7 +1629,6 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
     if train and not completed and history and config["training"]["save_checkpoint"]:
         torch.save({"branches": [checkpoint_payload(m) for m in branches], "epoch": len(history)}, output / "partial_branches.pt")
     summary["wall_s"] = time.perf_counter() - start_wall
-    save_json(output / "summary.json", summary)
     fields = ["epoch", "start_s", "end_s", "count_per_uav", "duration_s", "energy_j", "server_j", "uav_j", "split", "next_split", "solver_status", "val_accuracy"]
     with (output / "history.csv").open("w", newline="", encoding="utf-8-sig") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
@@ -1583,6 +1640,7 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
                              "uav_j": json.dumps(row["metrics"]["uav_energy_j"].tolist()), "split": json.dumps(row["split"].tolist()),
                              "next_split": json.dumps(json_value(row["next_split"]) if row["next_split"] is not None else None),
                              "solver_status": row["solver_status"], "val_accuracy": row["validation"]["accuracy"] if row["validation"] else ""})
+    save_json(output / "summary.json", summary)
     return {"summary": summary, "history": history, "final_model": global_model if completed else None,
             "best_model": best_model, "branches": branches, "output_dir": str(output)}
 
@@ -1726,7 +1784,7 @@ def verify_implementation(config: dict) -> dict:
     assert training_budget(default_config())["conditional_epochs"] == 100
     # 相同原始轨迹时刻必须产生完全相同的信道，不依赖调用顺序。
     np.testing.assert_array_equal(channel_at(20, c)["gain"], channel_at(20, c)["gain"])
-    return {"passed": True, "split_gradient_max_abs_errors": errors,
+    return {"passed": True, "verification_config": c, "split_gradient_max_abs_errors": errors,
             "checks": ["five_split_gradients_and_updates", "exhaustive_split_ranking", "input_immutability", "tail_batch_step_sum",
                        "weighted_aggregation", "frozen_epoch_snapshot", "periodic_capture_release", "legacy_rate_release", "disjoint_partitions",
                        "separate_stage_maxima", "new_prefix_payload", "final_zero_download",
@@ -1774,35 +1832,33 @@ def main() -> int:
                         "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
                 "budget": {"mode": "empirical"},
                 "optimization": {"max_iterations": 15, "split_objective": "reference_score"}}))
-        result = run_experiment(config, train=args.command != "simulate", output=args.output)
+        result = run_experiment(config, train=args.command != "simulate", output=args.output, label=args.command)
         report = {key: result["summary"][key] for key in ("status", "mode", "dataset_kind", "epochs_completed", "epochs_planned", "system_energy_j", "processed_samples")}
         report["failure_reason"] = result["summary"]["failure"]["reason"] if result["summary"]["failure"] else None
         print(json.dumps({"output_dir": str(Path(result["output_dir"]).resolve()), "summary": report}, default=json_value, ensure_ascii=False, indent=2))
         return 0 if result["summary"]["completed"] else 2
-    output = Path(args.output) if args.output else make_output_directory(config, args.command)
-    output.mkdir(parents=True, exist_ok=True)
-    if args.command == "check":
-        report = verify_implementation(config)
-        save_json(output / "verification.json", report)
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-    elif args.command == "prepare":
-        data = prepare_data(config)
-        save_json(output / "data_manifest.json", data)
-        save_json(output / "config.json", config)
-        print(json.dumps({"output": str(output), "capacity_per_uav": data["capacity"], "audit": data["audit"],
-                          "class_counts": data["class_counts"], "val": len(data["val"]), "test": len(data["test"])}, default=json_value, ensure_ascii=False, indent=2))
-    else:
-        import torch
-        torch.set_num_threads(config["training"]["torch_threads"])
-        model, _ = initialize_model(config)
-        save_json(output / "split_profiles.json", profile_splits(model, config))
-        print(f"模型画像已保存到 {output}")
+    with experiment_output(config, args.command, args.output) as (output, metadata):
+        if args.command == "check":
+            report = verify_implementation(config)
+            save_json(output / "verification.json", report)
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        elif args.command == "prepare":
+            data = prepare_data(config)
+            save_json(output / "data_manifest.json", data)
+            print(json.dumps({"output": str(output), "capacity_per_uav": data["capacity"], "audit": data["audit"],
+                              "class_counts": data["class_counts"], "val": len(data["val"]), "test": len(data["test"])}, default=json_value, ensure_ascii=False, indent=2))
+        else:
+            import torch
+            torch.set_num_threads(config["training"]["torch_threads"])
+            model, _ = initialize_model(config)
+            save_json(output / "split_profiles.json", profile_splits(model, config))
+            print(f"模型画像已保存到 {output}")
     return 0
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (ValueError, RuntimeError, FileNotFoundError, AssertionError) as error:
+    except (ValueError, RuntimeError, FileNotFoundError, FileExistsError, AssertionError) as error:
         print(f"ERROR: {type(error).__name__}: {error}", flush=True)
         raise SystemExit(1)

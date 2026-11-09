@@ -25,9 +25,7 @@ $sflPython = (Resolve-Path '.\.venv\Scripts\python.exe').Path
 在新电脑复核运行时，使用 `verification_config.json` 做一次真实 CBCL 四轮成本仿真。该配置保留正式实验的四机硬件与切分策略，并将采样间隔固定为 13.574144486692015 秒，使短实验沿用 120 轮主实验的采样频率。
 
 ```powershell
-$runDir = Join-Path '.\output' ('verification_release_' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
-& $sflPython -X utf8 -B .\uav_sfl.py simulate --config .\verification_config.json --output $runDir
-Get-Content -Raw -Encoding UTF8 (Join-Path $runDir 'summary.json')
+& $sflPython -X utf8 -B .\uav_sfl.py simulate --config .\verification_config.json
 ```
 
 使用本目录已准备的 ResNet18 权重进行正式训练：
@@ -48,7 +46,7 @@ Get-Content -Raw -Encoding UTF8 (Join-Path $runDir 'summary.json')
 
 正式实验默认使用 `optimization.split_objective="optimized_window"`，每次决策比较各组合分别分配资源后的预测窗口总能耗。固定参考评分对照使用 `"reference_score"`。
 
-在这台电脑上，默认结果目录是 `D:\Wangshiyu\Work1SFL\code\code_v2\output`。`simulate` 和 `train` 为每次运行新建子目录，终端会打印实际位置。子目录中的 `config.json` 是此次运行最终生效的完整参数快照，`summary.json` 记录完成状态和失败原因，`history.csv` 记录逐轮指标，`decisions.jsonl` 记录候选筛选和求解过程。需要自行指定此次结果目录时，在子命令后追加 `--output .\output\run_001` 并使用新的目录名。PowerShell 的 `$LASTEXITCODE` 为 0 表示成功，1 表示输入或执行错误，2 表示任务未完成。
+在这台电脑上，默认结果目录是 `D:\Wangshiyu\Work1SFL\code\code_v2\output`。`simulate` 和 `train` 为每次运行新建子目录，终端会打印实际位置。子目录中的 `run.json` 记录状态与版本，`config.json` 是此次运行最终生效的完整参数快照，`summary.json` 记录完成状态和失败原因，`history.csv` 记录逐轮指标，`decisions.jsonl` 记录候选筛选和求解过程。需要自行指定此次结果目录时，在子命令后追加 `--output .\output\run_001` 并使用新的目录名。PowerShell 的 `$LASTEXITCODE` 为 0 表示成功，1 表示输入或执行错误，2 表示任务未完成。
 
 其他入口按需运行：
 
@@ -238,7 +236,7 @@ print(result["summary"]["system_energy_j"])
 
 ## 输出与验证
 
-每次输出到 `output/<模式>_<北京时间>_seed.../`：
+每次输出到 `output/output_<北京时间>_<Git提交前12位>_<模式>_seed.../`：
 
 - `config.json`、`data_manifest.json`、`split_profiles.json`、`initialization.json`：全部输入、样本释放和来源。
 - 新版 `simulate` 和 `train` 运行保存 `uav_sfl_snapshot.py`，即启动本次实验的主程序源码。配套 `runtime.json` 记录 Python、操作系统平台、依赖包版本和源码 SHA-256；同一摘要也写入 `summary.json` 的 `code_sha256`。归档中早期运行使用的是当时的代码与参数，跨版本比较时先核对各目录的 `config.json` 和 `summary.json`。
@@ -252,3 +250,28 @@ print(result["summary"]["system_energy_j"])
 已执行检查包括五点梯度及单步更新一致性、输入参数不变、尾批步长、加权聚合、快照冻结、数据互斥、同步载荷、最终零下发、原始约束、能量单调性和不可行拒绝。四机合成数据已完成四轮端到端训练，CBCL 的 `reference_rebuild_example.json` 配置已完成四轮成本仿真。完整 120 epoch 预训练模型实验没有在本次代码编写中执行。
 
 API 依据：[CVXPY 原子函数](https://www.cvxpy.org/api_reference/cvxpy.atoms.elementwise.html)、[PyTorch autograd.grad](https://docs.pytorch.org/docs/stable/generated/torch.autograd.grad.html)、[标准 ResNet18](https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.resnet18.html)。
+
+## 结果目录与代码版本
+
+默认结果目录示例为 `output/output_20261109_230000_123456_abcdef123456_train_seed42/`。日期和时刻采用北京时间，带微秒以区分同秒启动的实验。Git 提交哈希在启动时读取，结果归档后的新提交不改变这次运行的版本标记。
+
+目录内保存以下信息。
+
+| 文件 | 内容 |
+|---|---|
+| run.json | 运行模式、开始与结束时间、运行状态、完整 Git 提交号、工作区修改标记与实际源码 SHA-256 |
+| config.json | 合并默认值、JSON 和命令行覆盖后的完整参数 |
+| runtime.json | Python、操作系统和依赖版本 |
+| uav_sfl_snapshot.py | 本次执行的源码快照 |
+| data_manifest.json | 样本划分、采样释放表与指纹 |
+| split_profiles.json、initialization.json | 计算通信画像、模型初始化来源 |
+| decisions.jsonl、history.csv | 每轮切分、资源、时延、能耗、约束与训练指标 |
+| summary.json | 完成状态、累计结果、验证测试指标及失败原因 |
+
+真实训练按配置另存最近聚合模型、最佳验证模型或中途分支模型。check、prepare、profile 也采用同样的日期和版本目录，并保存各自的报告或数据产物。
+
+源码或配置尚有修改时，目录名追加 `dirty_src<实际源码哈希前8位>`。从无 Git 历史的压缩包运行时，使用 `src<源码SHA-256前12位>`。这两种情况均在 run.json 中如实记录。显式 `--output` 仍可指定一个全新的精确结果目录，版本信息照常保存。
+
+运行开始即建立 run.json；正常完成、约束导致未完成、初始化错误和人工中断分别记录 completed、incomplete、error、interrupted。相同结果目录拒绝重复使用。仿真与训练的 summary.json 在逐轮指标文件完成写出后保存。
+
+新格式的 output_* 目录已允许加入 Git。提交结果时可在仓库根目录执行 `git add code_v2/output/output_实际目录名`，同时保存参数与结果。历史结果目录及其说明见 [结果索引](output/README.md)。
