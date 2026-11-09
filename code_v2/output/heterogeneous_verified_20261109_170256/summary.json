@@ -1,0 +1,52 @@
+{
+  "status": "completed",
+  "completed": true,
+  "mode": "cost_simulation",
+  "dataset_kind": "cbcl",
+  "strategy": "dynamic_opt",
+  "epochs_completed": 4,
+  "epochs_planned": 4,
+  "aggregations_completed": 2,
+  "reference_recovery": "rebuild",
+  "budget": {
+    "epochs": 4,
+    "aggregations": 2,
+    "conditional_epochs": 100,
+    "mode": "empirical",
+    "effective_bound_verified": false
+  },
+  "start_s": 0.0,
+  "finish_s": 2400.0000017182465,
+  "training_duration_s": 2400.0000017182465,
+  "variable_energy_j": 198.05018979510217,
+  "system_energy_j": 198.05018979510217,
+  "uav_energy_j": [
+    28.581233406550638,
+    21.376303001062794,
+    10.483601751691937,
+    4.5725567680633965
+  ],
+  "server_energy_j": 133.03649486773338,
+  "remaining_j": [
+    11971.41876659345,
+    15978.623696998939,
+    19989.51639824831,
+    23995.427443231936
+  ],
+  "processed_samples": 9936,
+  "distinct_training_samples": 2748,
+  "best_validation_epoch": null,
+  "best_validation": null,
+  "last_aggregation_epoch": 4,
+  "initialization": {
+    "kind": "random_diagnostic",
+    "seed": 42,
+    "head_reinitialized": true
+  },
+  "data_fingerprint": "82e543c4320d4a7abec230dfaa8b6cd6691120f2f1401dc8682cd810530d2853",
+  "hardware_profile_measured": false,
+  "failure": null,
+  "wall_s": 168.90016670001205,
+  "code_sha256": "9386a2630df47c54d797694243b9e474b274ed0dff78dd55754db67f6873b131",
+  "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。"
+}

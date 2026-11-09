@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "split_gradient_max_abs_errors": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "checks": [
+    "five_split_gradients_and_updates",
+    "exhaustive_split_ranking",
+    "input_immutability",
+    "tail_batch_step_sum",
+    "weighted_aggregation",
+    "frozen_epoch_snapshot",
+    "periodic_capture_release",
+    "legacy_rate_release",
+    "disjoint_partitions",
+    "separate_stage_maxima",
+    "new_prefix_payload",
+    "final_zero_download",
+    "convex_original_feasibility",
+    "accepted_energy_monotonicity",
+    "infeasible_rejection",
+    "binding_battery_constraint",
+    "strict_reference_failure_and_explicit_rebuild",
+    "budget_rounding",
+    "per_uav_cycles_and_limits",
+    "per_uav_phase_one",
+    "legacy_and_grouped_profiles"
+  ],
+  "solver_cases": [
+    {
+      "epoch": 1,
+      "status": "converged",
+      "energy_j": 0.03503859154514081
+    },
+    {
+      "epoch": 2,
+      "status": "converged",
+      "energy_j": 4.005117714038181
+    },
+    {
+      "epoch": 4,
+      "status": "iteration_limit_feasible",
+      "energy_j": 0.13761689315295925
+    }
+  ]
+}

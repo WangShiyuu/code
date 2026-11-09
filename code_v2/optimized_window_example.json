@@ -1,0 +1,6 @@
+{
+  "optimization": {
+    "split_objective": "optimized_window",
+    "split_workers": 6
+  }
+}

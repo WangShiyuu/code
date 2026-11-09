@@ -1,0 +1,9 @@
+{
+  "training": {
+    "epochs": 4
+  },
+  "data": {
+    "root": "../../DataSet/CBCL StreetScenes",
+    "sample_interval_s": 13.574144486692015
+  }
+}

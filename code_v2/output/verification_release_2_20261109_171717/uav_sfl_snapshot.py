@@ -1,0 +1,1808 @@
+r"""动态 UAV-SFL：参数、环境、式(25)—(31)优化、函数式 ResNet18 与训练。
+
+运行指令（Windows PowerShell）
+-------------------------------
+先进入目录，并选择本机已安装依赖的解释器：
+    cd D:\Wangshiyu\Work1SFL\code\code_v2
+    python -m venv .venv
+    $sflPython = (Resolve-Path '.\.venv\Scripts\python.exe').Path
+    & $sflPython -m pip install -r .\requirements.txt
+
+然后按用途选择一条命令；以下各命令可独立运行，不必顺序全部执行：
+    # 首次运行：四机、4 epoch 合成数据，检查优化与真实反向传播流程。
+    & $sflPython -X utf8 -B .\uav_sfl.py smoke
+    # 查看参数 / 验证五切点梯度、约束和尾批步长。
+    & $sflPython -X utf8 -B .\uav_sfl.py config
+    & $sflPython -X utf8 -B .\uav_sfl.py check
+    # 准备真实 CBCL 数据清单 / 计算五个切点的画像。
+    & $sflPython -X utf8 -B .\uav_sfl.py prepare
+    & $sflPython -X utf8 -B .\uav_sfl.py profile
+    # 仅进行资源和能耗仿真。
+    & $sflPython -X utf8 -B .\uav_sfl.py simulate
+    # 使用本目录的 ImageNet 预训练权重进行 CBCL 联合优化与训练。
+    & $sflPython -X utf8 -B .\uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
+
+以上命令均不依赖示例 JSON；直接修改 default_config() 即可调整默认参数。
+新电脑没有上述解释器时，先用 python -m venv .venv 创建环境，再运行
+    & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
+后续将 $sflPython 设置为 (Resolve-Path '.\.venv\Scripts\python.exe').Path。
+
+默认 strategy='dynamic_opt'、split_objective='optimized_window'。巡逻采样按固定秒数入库；
+每个切分组合按相同的预测窗口分别求资源，比较通过原约束复核的累计能耗。
+reference_recovery='rebuild' 用于可选 reference_score 策略的参考资源恢复。
+train 默认计划 120 epoch，实际能否完成取决于约束和求解状态；smoke 只做诊断。
+结果位于本文件同目录的 output/，先查看 summary.json 中的 completed/failure，
+再查看 history.csv 和 decisions.jsonl。退出码 0/1/2 分别表示成功/错误/任务未完成。
+
+来源：同目录 notion_source.md，Notion 页面最后编辑于 2026-10-29T18:45:37Z。
+入口：python uav_sfl.py {config,prepare,profile,simulate,train,check,smoke} --help
+所有研究逻辑在本文件；不导入 code_v0/code_v1，也不定义有状态业务类。
+
+数据契约（数组第 0 维始终按 UAV 编号 0..N-1 排列）：
+  Config: 嵌套 dict，唯一默认值见 default_config()，可用 JSON 局部覆盖。
+  Data: {records:list[dict], clients:list[list[int]], val:list[int], test:list[int],
+         release_s: ndarray[Dmax], start_s:float, classes:list[str], ...}。
+  Model: {params:dict[str,Tensor], buffers:dict[str,Tensor]}；BN 统计量固定。
+  Profile: {client_cycles: ndarray[N,5] 或共享 ndarray[5],
+            server_cycles,activation_bits,gradient_bits,prefix_bits,
+            client_flops,server_flops: ndarray[5], metadata:dict}。
+  Resources: {frequency_hz,power_w,up_hz,down_hz: ndarray[N]}。
+  Problem: {epoch:int,count:int,gain:ndarray[N],split:ndarray[N],next_split:array|None,
+            remaining_j:ndarray[N],aggregate:bool,final:bool}。
+  SolveResult: {ok:bool,status:str,resources:Resources|None,metrics:dict|None,
+                trace:list[dict],initialization:list[dict],wall_s:float}。
+  RunResult: {summary:dict,history:list[dict],final_model:Model|None,
+              best_model:Model|None,branches:list[Model]|None,output_dir:str}。
+
+核心函数不修改传入配置/参数/资源；文件读写、打印仅在 I/O 和入口函数。
+单位：m、s、Hz、W、J、bit、cycle；CVXPY 内部采用频率比例、带宽比例、Mbit/s。
+物理时间来自式(13)，不等于本机训练或求解的墙钟时间。
+默认硬件、轨迹、预算是可运行场景假设，非设备标定结果；详见 README。
+"""
+from __future__ import annotations
+
+import argparse
+from concurrent.futures import ProcessPoolExecutor
+import copy
+import csv
+import hashlib
+from itertools import product
+from functools import partial
+import io
+import importlib.metadata
+import json
+import math
+import platform
+import sys
+import time
+import warnings
+import zipfile
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parent
+CLASSES = ["bicycle", "building", "car", "pedestrian", "road", "sidewalk", "sky", "store", "tree"]
+MEAN = (0.485, 0.456, 0.406)
+STD = (0.229, 0.224, 0.225)
+BLOCKS = [(64, 64, 1), (64, 64, 1), (64, 128, 2), (128, 128, 1),
+          (128, 256, 2), (256, 256, 1), (256, 512, 2), (512, 512, 1)]
+
+BLOCKS_PER_GROUP = 2
+SPLIT_POINTS = tuple(range(0, len(BLOCKS) + 1, BLOCKS_PER_GROUP))
+
+
+# 1. 参数与数据结构 ------------------------------------------------------------
+def default_config(num_uavs: int = 4) -> dict:
+    """返回独立 Config；每次调用重新创建全部嵌套字典。
+
+    编辑顺序建议：先设 data 的数据路径/尺寸，再设 training 的轮数/步长，
+    然后设硬件、时限、电池及 optimization 策略。修改后执行 config 子命令，
+    由 validate_config 检查约束；这些默认数字是场景输入，需按实验标定。
+    """
+    config = {
+        # seed 同时确定数据划分与模型初始化；批次顺序再派生 epoch/UAV 子种子。
+        # 相同种子保证输入可复现；不同资源策略仍可能因时间不同使用不同 D_k。
+        "seed": 42,
+        "num_uavs": 4,
+        # root 放原始 Images.zip/Annotations.zip；区域图像在读取 batch 时裁剪。
+        # val/test_fraction 按原始街景划分，避免同场景区域跨集合泄漏。
+        # samples_per_uav=None 自动按训练池等量分配；整数则指定每机容量。
+        # 首轮使用既往巡逻样本，之后每经过一个采样间隔就入库一批新区域。
+        # sample_interval_s=None 时按规划时段和剩余批数标定固定间隔。
+        # patrol_epoch_s 是任务规划用的名义轮长，独立于资源求解的硬时限。
+        # 显式设置 rate_per_s 可复现旧的恒速释放及启动等待。
+        # partition='dirichlet' 时 alpha 越小，通常类别偏斜越强，实际计数另存。
+        # fixed_epoch_counts=None 按物理时间释放；给列表则改为共同快照消融。
+        "data": {"kind": "cbcl", "root": str(ROOT.parents[1] / "DataSet" / "CBCL StreetScenes"),
+                 "image_size": 64, "val_fraction": 0.1, "test_fraction": 0.1,
+                 "samples_per_uav": None, "initial_fraction": 0.1, "rate_per_s": None,
+                 "patrol_epoch_s": 600.0, "patrol_collection_fraction": 0.95,
+                 "sample_interval_s": None, "samples_per_capture": 1,
+                 "synthetic_per_uav": 20, "synthetic_eval_size": 12,
+                 "partition": "iid", "dirichlet_alpha": 0.5,
+                 "fixed_epoch_counts": None},
+        # epochs 是本地 epoch 数，aggregation_period=2 表示每两轮完整聚合一次。
+        # epoch_step_size 是一整轮的累计步长，batch 实际步长还要乘 |B|/D_k。
+        # checkpoint=None 时正式 train 要求 --checkpoint；smoke 显式允许随机初始化。
+        # device 选择本机执行设备；torch_threads 控制 CPU 并行度，不代表 UAV 算力。
+        "training": {"epochs": 120, "aggregation_period": 2, "epoch_step_size": 0.01,
+                     "batch_size": 32, "device": "cpu", "torch_threads": 4,
+                     "checkpoint": None, "allow_random_init": False, "save_checkpoint": True},
+        # empirical 使用上面的 epochs；theoretical 使用式(23)并要求已验证有效界。
+        # epsilon 的含义是梯度范数平方目标上界，不能解释为分类错误率。
+        "budget": {"mode": "empirical", "A_bar": 3.85, "C_bar": 0.0115,
+                   "epsilon": 0.05, "effective_bound_verified": False},
+        # 轨迹坐标/半径单位 m，速度 m/s。偏心圆使 UAV 与服务器距离随时间变化。
+        # 轨迹是外部给定条件，连续资源优化不会改变飞行路线或速度。
+        "trajectory": {"server_xyz_m": [0.0, 0.0, 0.0], "altitude_m": 100.0,
+                       "radius_min_m": 250.0, "radius_max_m": 450.0,
+                       "center_offset_m": 150.0, "speed_m_s": 10.0},
+        # beta_l/beta_n 是线性参考功率增益，alpha_l/alpha_n 是路径损耗指数。
+        # los_a/los_b 的仰角单位为度；noise_psd_w_hz 是 W/Hz，需乘分配带宽。
+        "channel": {"los_a": 9.61, "los_b": 0.16, "beta_l": 1e-4, "beta_n": 1e-6,
+                    "alpha_l": 2.0, "alpha_n": 2.5, "noise_psd_w_hz": 3.981e-21},
+        # 计算功率 Pc=kappa*f^3；compute_power_max_w 据此决定频率上限。
+        # power_max_w 是上行发射功率 W，cycles_per_flop 将 FLOPs 换成等效周期。
+        # 所有 UAV 参数均可为公共标量或按 UAV 1..N 排列的列表。
+        # energy_cap_j 是扣除固定消耗后的训练可用电量 J。
+        "uav": {"kappa": 1e-28, "compute_power_max_w": [0.1, 0.1728, 0.3375, 0.5832],
+                "power_max_w": [0.3, 0.5, 0.8, 1.0],
+                "cycles_per_flop": [1.0, 0.75, 0.5, 0.375],
+                "energy_cap_j": [12000.0, 16000.0, 20000.0, 24000.0]},
+        # frequency_hz 为每条并行后缀分支的频率，downlink_power_w 为每条链路功率。
+        # aggregation_time_s/energy_j 每次完整聚合只计一次，不乘 UAV 数量。
+        "server": {"frequency_hz": 3e9, "kappa": 1e-28, "cycles_per_flop": 0.03,
+                   "downlink_power_w": 2.0, "aggregation_time_s": 0.01,
+                   "aggregation_energy_j": 0.1},
+        # 上下行各自共享总带宽，单位 Hz；两方向预算不能互相挪用。
+        "radio": {"total_up_hz": 2e7, "total_down_hz": 2e7},
+        # 初始参考频率/功率相对于对应上限的比例，初始带宽按 N 等分。
+        # 参考配置只提供候选评分/初值，执行前仍需校验时限和电池。
+        "reference": {"frequency_fraction": 0.8, "power_fraction": 0.5},
+        # strategy: fixed_fixed / fixed_opt / dynamic_opt / no_window，详见 README。
+        # fixed_split 为客户端残差块数 0/2/4/6/8；动态策略从它开始寻找首周期切分，之后可改变。
+        # window_epochs 只统计已完成轮次；max_iterations 为每次 P2 的迭代上限。
+        # relative_tolerance 控制真实能耗收敛；feasibility_tolerance 用于原约束核验。
+        # positive_floor 是比例变量的数值正下界，限制开区间边缘的病态求解。
+        # 动态决策穷举所有无人机的组边界组合，按可行组合的参考总能耗排序。
+        "optimization": {"strategy": "dynamic_opt", "fixed_split": 4,
+                         "split_objective": "optimized_window", "split_workers": 6,
+                         "reference_recovery": "rebuild",
+                         "window_epochs": 5, "max_iterations": 50,
+                         "relative_tolerance": 1e-5, "feasibility_tolerance": 2e-6,
+                         "positive_floor": 1e-5, "solver": "CLARABEL"},
+        # deadline 是单 epoch 时限；fixed_energy_j 是系统固定消耗，仅汇总时加一次。
+        "task": {"epoch_deadline_s": 600.0, "fixed_energy_j": 0.0},
+        "output_root": str(ROOT / "output"),
+    }
+    if num_uavs != 4:
+        # 兼容只覆盖机器数量的旧配置，其未显式设置的设备参数沿用同质默认值。
+        config["num_uavs"] = num_uavs
+        config["uav"] = {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
+                         "cycles_per_flop": 0.5, "energy_cap_j": 200000.0}
+    return config
+
+
+def merge_config(base: dict, updates: dict) -> dict:
+    """严格递归覆盖已知字段，返回新 dict；拼错字段立即报错。"""
+    result = copy.deepcopy(base)
+    for key, value in updates.items():
+        if key not in base:
+            raise ValueError(f"未知配置字段: {key}")
+        if key == "optimization":
+            # 允许加载旧实验配置。穷举没有初始化/坐标扫描上限或降分阈值。
+            obsolete = {"max_initial_candidates", "max_coordinate_sweeps", "score_tolerance_j"}
+            value = {k: v for k, v in value.items() if k not in obsolete}
+        result[key] = merge_config(base[key], value) if isinstance(base[key], dict) else copy.deepcopy(value)
+    return result
+
+
+def training_budget(config: dict) -> dict:
+    """按式(23)返回条件性轮数与实际轮数；经验预算不宣称理论保证。"""
+    b, k = config["budget"], config["training"]["aggregation_period"]
+    gap = b["epsilon"] - b["C_bar"]
+    if gap <= 0 or b["A_bar"] < 0 or b["C_bar"] < 0:
+        raise ValueError("预算要求 A_bar>=0、0<=C_bar<epsilon")
+    ratio = b["A_bar"] / (k * gap)
+    conditional = k * max(1, math.ceil(ratio - 1e-12 * max(1, abs(ratio))))
+    if b["mode"] == "theoretical" and not b["effective_bound_verified"]:
+        raise ValueError("尚未验证 epoch 级有效界，只能使用 empirical 预算")
+    actual = conditional if b["mode"] == "theoretical" else config["training"]["epochs"]
+    return {"epochs": actual, "aggregations": actual // k, "conditional_epochs": conditional,
+            "mode": b["mode"], "effective_bound_verified": b["effective_bound_verified"]}
+
+
+def validate_config(c: dict) -> dict:
+    """校验形状、物理边界和研究协议；返回深拷贝，不检查输入文件是否存在。"""
+    c = copy.deepcopy(c)
+    def positive(x, name, integer=False):
+        if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) or x <= 0:
+            raise ValueError(f"{name} 必须为有限正数")
+        if integer and not isinstance(x, int):
+            raise ValueError(f"{name} 必须为整数")
+    for key in ("num_uavs",):
+        positive(c[key], key, True)
+    if isinstance(c["seed"], bool) or not isinstance(c["seed"], int) or c["seed"] < 0:
+        raise ValueError("seed 必须为非负整数")
+    for key in ("epochs", "batch_size", "torch_threads"):
+        positive(c["training"][key], key, True)
+    if c["training"]["aggregation_period"] != 2 or c["training"]["epochs"] % 2:
+        raise ValueError("本研究 K=2，epochs 必须是正偶数")
+    positive(c["training"]["epoch_step_size"], "epoch_step_size")
+    if c["budget"]["mode"] not in ("empirical", "theoretical"):
+        raise ValueError("budget.mode 必须是 empirical/theoretical")
+    c["training"]["epochs"] = training_budget(c)["epochs"]
+    d = c["data"]
+    if d["kind"] not in ("cbcl", "synthetic") or d["partition"] not in ("iid", "dirichlet"):
+        raise ValueError("data.kind=cbcl/synthetic，partition=iid/dirichlet")
+    positive(d["image_size"], "image_size", True)
+    if d["image_size"] < 32:
+        raise ValueError("ResNet18 image_size 至少 32")
+    for key in ("patrol_epoch_s", "patrol_collection_fraction", "dirichlet_alpha", "synthetic_per_uav", "synthetic_eval_size"):
+        positive(d[key], key, key.startswith("synthetic"))
+    if d["patrol_collection_fraction"] > 1:
+        raise ValueError("patrol_collection_fraction 必须属于 (0,1]")
+    if d["rate_per_s"] is not None:
+        positive(d["rate_per_s"], "rate_per_s")
+    d.setdefault("samples_per_capture", 1)
+    d.setdefault("sample_interval_s", None)
+    positive(d["samples_per_capture"], "samples_per_capture", True)
+    if d["sample_interval_s"] is not None:
+        positive(d["sample_interval_s"], "sample_interval_s")
+    if d["rate_per_s"] is not None and (d["sample_interval_s"] is not None or d["samples_per_capture"] != 1):
+        raise ValueError("旧版 rate_per_s 与巡逻采样间隔/批量不能同时指定")
+    if d["samples_per_uav"] is not None:
+        positive(d["samples_per_uav"], "samples_per_uav", True)
+    if not 0 < d["initial_fraction"] <= 1:
+        raise ValueError("initial_fraction 必须属于 (0,1]")
+    if min(d["val_fraction"], d["test_fraction"]) <= 0 or d["val_fraction"] + d["test_fraction"] >= 1:
+        raise ValueError("验证/测试比例必须为正且和小于 1")
+    for group in ("uav", "radio", "channel"):
+        for key, val in c[group].items():
+            if group == "uav" and isinstance(val, list):
+                if len(val) != c["num_uavs"]:
+                    raise ValueError(f"uav.{key} 数组长度必须为 N")
+                for v in val:
+                    positive(v, f"uav.{key}")
+            else:
+                positive(val, key)
+    for key, val in c["server"].items():
+        if key in ("aggregation_time_s", "aggregation_energy_j"):
+            if not math.isfinite(val) or val < 0:
+                raise ValueError(f"{key} 必须非负")
+        else:
+            positive(val, key)
+    positive(c["task"]["epoch_deadline_s"], "epoch_deadline_s")
+    if not math.isfinite(c["task"]["fixed_energy_j"]) or c["task"]["fixed_energy_j"] < 0:
+        raise ValueError("fixed_energy_j 必须非负")
+    t = c["trajectory"]
+    if len(t["server_xyz_m"]) != 3 or not np.isfinite(t["server_xyz_m"]).all():
+        raise ValueError("server_xyz_m 必须为有限三维坐标")
+    if t["altitude_m"] <= t["server_xyz_m"][2]:
+        raise ValueError("UAV 必须高于地面服务器")
+    for key in ("speed_m_s", "radius_min_m", "radius_max_m"):
+        positive(t[key], key)
+    if t["radius_max_m"] < t["radius_min_m"] or not math.isfinite(t["center_offset_m"]):
+        raise ValueError("轨迹半径/中心偏移不合法")
+    o = c["optimization"]
+    o.setdefault("split_objective", "reference_score")
+    o.setdefault("split_workers", 1)
+    positive(o["split_workers"], "split_workers", True)
+    if o["split_objective"] not in ("reference_score", "optimized_window"):
+        raise ValueError("split_objective 必须为 reference_score/optimized_window")
+    if o["strategy"] not in ("dynamic_opt", "fixed_opt", "fixed_fixed", "no_window"):
+        raise ValueError("未知 strategy")
+    if o["reference_recovery"] not in ("none", "rebuild"):
+        raise ValueError("reference_recovery 必须为 none/rebuild")
+    validate_split_point(o["fixed_split"])
+    for key in ("window_epochs", "max_iterations"):
+        positive(o[key], key, True)
+    for key in ("relative_tolerance", "feasibility_tolerance", "positive_floor"):
+        positive(o[key], key)
+    if o["positive_floor"] * c["num_uavs"] >= 1:
+        raise ValueError("数值正下界过大，无法分配带宽")
+    for v in c["reference"].values():
+        if not 0 < v <= 1:
+            raise ValueError("参考资源比例必须属于 (0,1]")
+    fixed = d["fixed_epoch_counts"]
+    if fixed is not None:
+        if len(fixed) != c["training"]["epochs"]:
+            raise ValueError("fixed_epoch_counts 长度必须等于训练轮数")
+        for v in fixed:
+            positive(v, "fixed_epoch_counts", True)
+        if any(a > b for a, b in zip(fixed, fixed[1:])):
+            raise ValueError("统一样本快照必须非减")
+    return c
+
+
+def load_config(path: str | None = None, updates: dict | None = None) -> dict:
+    """读取可选 JSON 和内存覆盖，返回验证后的 Config；相对路径相对 JSON。"""
+    source = Path(path).resolve() if path else None
+    file_updates = json.loads(source.read_text(encoding="utf-8-sig")) if source else {}
+    num_uavs = (updates or {}).get("num_uavs", file_updates.get("num_uavs", 4))
+    c = default_config(num_uavs)
+    if path:
+        c = merge_config(c, file_updates)
+        for group, key in (("data", "root"), ("training", "checkpoint")):
+            if c[group][key]:
+                p = Path(c[group][key]).expanduser()
+                c[group][key] = str(p if p.is_absolute() else source.parent / p)
+        p = Path(c["output_root"]).expanduser()
+        c["output_root"] = str(p if p.is_absolute() else source.parent / p)
+    return validate_config(merge_config(c, updates or {}))
+
+
+def json_value(value: Any) -> Any:
+    """将数值容器转为严格 JSON 数据；Tensor 由 checkpoint 接口单独保存。"""
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"不能写入 JSON: {type(value)}")
+
+
+def save_json(path: str | Path, value: Any) -> None:
+    """I/O：原子替换单个 JSON 文件，拒绝 NaN/Infinity。"""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    temp = p.with_suffix(p.suffix + ".tmp")
+    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2, default=json_value,
+                               allow_nan=False) + "\n", encoding="utf-8")
+    temp.replace(p)
+
+
+# 2. 原始数据、独立场景划分、按物理时间释放 --------------------------------------
+def read_cbcl_records(root: str) -> tuple[list[dict], dict]:
+    """读取两份 ZIP，返回有效区域记录和审计计数；不解压、不复制样本。"""
+    from PIL import Image
+    root = Path(root)
+    records, skipped = [], 0
+    with zipfile.ZipFile(root / "Images.zip") as images, zipfile.ZipFile(root / "Annotations.zip") as annotations:
+        members = {}
+        for member in images.namelist():
+            name = PurePosixPath(member.replace("\\", "/")).name
+            if name.lower().endswith((".jpg", ".jpeg", ".png")):
+                if name in members:
+                    raise ValueError(f"重复图片文件名: {name}")
+                members[name] = member
+        seen = set()
+        for member in sorted(x for x in annotations.namelist() if x.lower().endswith(".xml")):
+            tree = ET.fromstring(annotations.read(member))
+            name = PurePosixPath((tree.findtext("filename") or "").strip().replace("\\", "/")).name
+            if name not in members or name in seen:
+                raise ValueError(f"标注图片缺失或重复: {name}")
+            seen.add(name)
+            with images.open(members[name]) as stream, Image.open(stream) as im:
+                width, height = im.size
+            for oid, obj in enumerate(tree.findall("object")):
+                label = (obj.findtext("name") or "").strip().lower()
+                if (obj.findtext("deleted") or "0").strip() == "1" or not label:
+                    skipped += 1
+                    continue
+                if label not in CLASSES:
+                    raise ValueError(f"未知类别 {label!r}: {name}")
+                points = [(float(pt.findtext("x")), float(pt.findtext("y"))) for pt in obj.findall("polygon/pt")]
+                if len(points) < 3 or not np.isfinite(points).all():
+                    skipped += 1
+                    continue
+                xs, ys = zip(*points)
+                box = [max(0, math.floor(min(xs) - 1)), max(0, math.floor(min(ys) - 1)),
+                       min(width, math.ceil(max(xs))), min(height, math.ceil(max(ys)))]
+                if box[0] >= box[2] or box[1] >= box[3]:
+                    skipped += 1
+                    continue
+                records.append({"id": f"{name}:{oid}", "scene": name, "member": members[name],
+                                "bbox": box, "label": CLASSES.index(label)})
+    if not records:
+        raise ValueError("没有有效 CBCL 区域")
+    return records, {"images": len(members), "scenes": len(seen), "regions": len(records), "skipped": skipped}
+
+
+def partition_clients(indices: list[int], records: list[dict], config: dict) -> tuple[list[list[int]], list[int]]:
+    """返回等量且不重叠的客户端序列和未使用索引；支持 IID/容量约束 Dirichlet。"""
+    rng = np.random.default_rng(config["seed"] + 1)
+    n, d = config["num_uavs"], config["data"]
+    size = d["samples_per_uav"] or len(indices) // n
+    if size < 1 or size * n > len(indices):
+        raise ValueError("真实训练区域不足以满足每机样本数，禁止复制补齐")
+    order = rng.permutation(indices).tolist()
+    selected, unused = order[:size * n], order[size * n:]
+    if d["partition"] == "iid":
+        return [selected[i * size:(i + 1) * size] for i in range(n)], unused
+    # 每类的设备偏好采自 Dirichlet；逐样本在尚未填满的设备中归一化采样。
+    # 等容量约束会改变最终经验分布，因此保存各机实际类别计数供报告。
+    preferences = rng.dirichlet([d["dirichlet_alpha"]] * n, len(CLASSES))
+    clients = [[] for _ in range(n)]
+    room = np.full(n, size)
+    for index in selected:
+        weights = preferences[records[index]["label"]] * (room > 0)
+        weights = weights / weights.sum()
+        uid = int(rng.choice(n, p=weights))
+        clients[uid].append(index)
+        room[uid] -= 1
+    return [rng.permutation(ids).tolist() for ids in clients], unused
+
+
+def patrol_radii(config: dict) -> np.ndarray:
+    trajectory = config["trajectory"]
+    return np.linspace(trajectory["radius_min_m"], trajectory["radius_max_m"], config["num_uavs"])
+
+
+def sample_release_schedule(capacity: int, config: dict) -> tuple[np.ndarray, dict]:
+    """返回每机共同可用的第 j 个样本的物理时刻，以及可复算的巡逻计划。"""
+    d = config["data"]
+    initial = max(1, math.floor(capacity * d["initial_fraction"]))
+    if d["rate_per_s"] is not None:
+        release = np.arange(1, capacity + 1, dtype=float) / d["rate_per_s"]
+        return release, {"mode": "constant_rate", "initial_count": initial, "rate_per_s": d["rate_per_s"]}
+
+    # 规划区间取首轮开始至末轮开始，预留末段用完整样本训练。
+    # 不读取未来实耗时；对同一巡逻计划，各种资源策略共用相同物理时间表。
+    target_s = (config["training"]["epochs"] - 1) * d["patrol_epoch_s"] * d["patrol_collection_fraction"]
+    release = np.zeros(capacity)
+    new_samples = capacity - initial
+    batch = d["samples_per_capture"]
+    captures = (new_samples + batch - 1) // batch
+    interval = d["sample_interval_s"]
+    if new_samples:
+        if interval is None:
+            interval = target_s / captures
+        capture_number = np.arange(new_samples) // batch + 1
+        release[initial:] = capture_number * interval
+    return release, {"mode": "periodic_capture", "initial_count": initial, "target_s": target_s,
+                     "sample_interval_s": interval, "samples_per_capture": batch,
+                     "captures": captures,
+                     "full_release_s": float(release[-1])}
+
+
+def prepare_data(config: dict) -> dict:
+    """I/O：返回 Data；默认按原始场景 80/10/10 隔离，再等量分配训练区域。
+
+    records 是全体有效区域表；clients[n]、val、test 都保存对该表的整数索引。
+    clients[n] 的固定顺序同时表示采集顺序，后续只取前 D_k 个；训练打乱的是
+    快照副本，不能打乱这份永久序列。release_s 长度等于每机容量，所有机共用。
+    此函数只读取 ZIP/生成清单，不训练、不写裁剪缓存；保存清单由调用者负责。
+    """
+    d, n = config["data"], config["num_uavs"]
+    if d["kind"] == "cbcl":
+        records, audit = read_cbcl_records(d["root"])
+        scenes = sorted({r["scene"] for r in records})
+        scenes = np.random.default_rng(config["seed"]).permutation(scenes).tolist()
+        nv, nt = max(1, round(len(scenes) * d["val_fraction"])), max(1, round(len(scenes) * d["test_fraction"]))
+        if nv + nt >= len(scenes):
+            raise ValueError("独立场景不足，无法划分训练/验证/测试")
+        val_scenes, test_scenes = set(scenes[:nv]), set(scenes[nv:nv + nt])
+        val = [i for i, r in enumerate(records) if r["scene"] in val_scenes]
+        test = [i for i, r in enumerate(records) if r["scene"] in test_scenes]
+        train = [i for i, r in enumerate(records) if r["scene"] not in val_scenes | test_scenes]
+    else:
+        train_size, eval_size = n * d["synthetic_per_uav"], d["synthetic_eval_size"]
+        records = [{"id": f"synthetic_{i}", "scene": f"synthetic_{i}", "label": i % len(CLASSES)}
+                   for i in range(train_size + 2 * eval_size)]
+        train = list(range(train_size))
+        val = list(range(train_size, train_size + eval_size))
+        test = list(range(train_size + eval_size, len(records)))
+        audit = {"synthetic": True, "regions": len(records)}
+    clients, unused = partition_clients(train, records, config)
+    capacity = len(clients[0])
+    release, plan = sample_release_schedule(capacity, config)
+    if d["fixed_epoch_counts"] is not None and max(d["fixed_epoch_counts"]) > capacity:
+        raise ValueError("统一快照超过真实训练容量")
+    # 指纹覆盖分组、样本顺序、释放表和预处理；原始包另留大小/mtime 以供审计。
+    result = {"kind": d["kind"], "records": records, "clients": clients, "val": val, "test": test,
+              "unused_train": unused, "release_s": release, "start_s": float(release[plan["initial_count"] - 1]),
+              "release_plan": plan,
+              "capacity": capacity, "classes": CLASSES.copy(), "audit": audit,
+              "class_counts": [np.bincount([records[i]["label"] for i in ids], minlength=len(CLASSES)) for ids in clients],
+              "image_size": d["image_size"], "root": d["root"], "seed": config["seed"]}
+    if d["kind"] == "cbcl":
+        result["source_files"] = {name: {"bytes": (Path(d["root"]) / name).stat().st_size,
+                                        "mtime_ns": (Path(d["root"]) / name).stat().st_mtime_ns}
+                                  for name in ("Images.zip", "Annotations.zip")}
+    result["fingerprint"] = hashlib.sha256(json.dumps(result, default=json_value, sort_keys=True).encode()).hexdigest()
+    return result
+
+
+def epoch_snapshot(data: dict, physical_s: float, epoch: int, config: dict) -> dict:
+    """纯函数：返回轮初固定样本数/各机索引；epoch 从 1 开始编号。
+
+    physical_s 是仿真物理时刻。searchsorted(..., side='right') 包含恰在轮初
+    到达的样本；返回的 indices 是新列表，所以之后释放新样本不会改变本轮。
+    fixed_epoch_counts 仅供共同快照消融，会显式替代物理释放计数。
+    """
+    fixed = config["data"]["fixed_epoch_counts"]
+    count = fixed[epoch - 1] if fixed is not None else int(np.searchsorted(data["release_s"], physical_s, side="right"))
+    if not 1 <= count <= data["capacity"]:
+        raise ValueError("当前释放表未满足启动条件或统一快照越界")
+    return {"count": count, "indices": [ids[:count] for ids in data["clients"]],
+            "time_s": physical_s, "mode": "matched_snapshot_ablation" if fixed else "physical_release"}
+
+
+def load_batch(data: dict, indices: list[int], device: str) -> tuple[Any, Any]:
+    """I/O：读取指定索引，返回 float32 [B,3,H,W]、int64 [B]；无随机增强。"""
+    import torch
+    from PIL import Image
+    size, samples = data["image_size"], []
+    labels = [data["records"][i]["label"] for i in indices]
+    if data["kind"] == "cbcl":
+        with zipfile.ZipFile(Path(data["root"]) / "Images.zip") as z:
+            for i in indices:
+                r = data["records"][i]
+                with Image.open(io.BytesIO(z.read(r["member"]))) as im:
+                    crop = im.convert("RGB").crop(r["bbox"]).resize((size, size), Image.Resampling.BILINEAR)
+                    samples.append(np.asarray(crop, dtype=np.float32) / 255.0)
+    else:
+        for i, label in zip(indices, labels):
+            rng = np.random.default_rng(np.random.SeedSequence([data["seed"], i]))
+            pixels = rng.uniform(0, 0.2, (size, size, 3)).astype(np.float32)
+            pixels[:, :, label % 3] += 0.6  # 仅供诊断的可学习合成模式。
+            samples.append(pixels)
+    array = (np.stack(samples) - np.asarray(MEAN, np.float32)) / np.asarray(STD, np.float32)
+    return (torch.tensor(array.transpose(0, 3, 1, 2), device=device),
+            torch.tensor(labels, dtype=torch.long, device=device))
+
+
+# 3. 函数式 ResNet18、画像、SGD -------------------------------------------------
+def block_name(index: int) -> str:
+    """0..7 残差块索引 -> torchvision 兼容参数前缀。"""
+    return f"layer{index // 2 + 1}.{index % 2}"
+
+
+def initialize_model(config: dict, require_pretrained: bool = False) -> tuple[dict, dict]:
+    """返回 (Model, provenance)，构造可按残差块边界执行的函数式 ResNet18。
+
+    params 保存可训练叶子 Tensor；buffers 保存固定 BN 均值、方差和计数项。
+    参数名称采用标准 torchvision 键，使官方 state_dict 可以直接映射。
+    require_pretrained=True 用于正式训练：没有 checkpoint 且未显式允许随机
+    初始化就报错；False 允许为成本画像创建模型。初始化使用局部随机生成器。
+    provenance 记录文件哈希、分类头重建情况和旧 BN 兼容项，供实验追溯。
+    """
+    import torch
+    params, buffers = {}, {}
+    generator = torch.Generator(device="cpu").manual_seed(config["seed"])
+    def conv(name, cin, cout, kernel):
+        params[name + ".weight"] = torch.randn(cout, cin, kernel, kernel, generator=generator) * math.sqrt(2 / (cout * kernel * kernel))
+    def bn(name, width):
+        params[name + ".weight"], params[name + ".bias"] = torch.ones(width), torch.zeros(width)
+        buffers[name + ".running_mean"], buffers[name + ".running_var"] = torch.zeros(width), torch.ones(width)
+        buffers[name + ".num_batches_tracked"] = torch.tensor(0, dtype=torch.long)
+    conv("conv1", 3, 64, 7)
+    bn("bn1", 64)
+    for i, (cin, cout, stride) in enumerate(BLOCKS):
+        prefix = block_name(i)
+        conv(prefix + ".conv1", cin, cout, 3)
+        bn(prefix + ".bn1", cout)
+        conv(prefix + ".conv2", cout, cout, 3)
+        bn(prefix + ".bn2", cout)
+        if stride == 2:
+            conv(prefix + ".downsample.0", cin, cout, 1)
+            bn(prefix + ".downsample.1", cout)
+    width = len(CLASSES)
+    params["fc.weight"] = (torch.rand(width, 512, generator=generator) * 2 - 1) / math.sqrt(512)
+    params["fc.bias"] = (torch.rand(width, generator=generator) * 2 - 1) / math.sqrt(512)
+    provenance = {"kind": "random_diagnostic", "seed": config["seed"], "head_reinitialized": True}
+    path = config["training"]["checkpoint"]
+    if path:
+        checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+        if "params" in checkpoint and "buffers" in checkpoint:
+            state = {**checkpoint["params"], **checkpoint["buffers"]}
+        else:
+            state = checkpoint.get("state_dict", checkpoint)
+        state = {key.removeprefix("module."): val for key, val in state.items()}
+        expected = {**params, **buffers}
+        # 官方早期 ResNet18 权重没有 BN num_batches_tracked。遵循 PyTorch
+        # BatchNorm 的旧权重兼容规则，仅为这些计数项补零；固定 BN 不使用计数。
+        # 权重、running_mean/running_var 等其他缺失项仍按错误处理。
+        initialized_counters = [name for name in buffers
+                                if name.endswith(".num_batches_tracked") and name not in state]
+        state = {**state, **{name: buffers[name].clone() for name in initialized_counters}}
+        missing = [name for name in expected if name not in state]
+        unexpected = set(state) - set(expected)
+        if missing or unexpected:
+            raise ValueError(f"checkpoint 键不匹配: missing={missing[:5]}, unexpected={sorted(unexpected)[:5]}")
+        head_reset = False
+        for name, original in expected.items():
+            incoming = state[name]
+            if incoming.shape != original.shape:
+                if name.startswith("fc."):
+                    head_reset = True
+                    continue
+                raise ValueError(f"checkpoint 形状不匹配: {name}")
+            if not torch.isfinite(incoming).all():
+                raise ValueError(f"checkpoint 非有限参数: {name}")
+            (params if name in params else buffers)[name] = incoming.to(original.dtype).clone()
+        provenance = {"kind": "local_checkpoint", "path": str(Path(path).resolve()),
+                      "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(), "head_reinitialized": head_reset,
+                      "legacy_bn_counters_initialized": initialized_counters}
+    elif require_pretrained and not config["training"]["allow_random_init"]:
+        raise ValueError("正式训练需要 training.checkpoint（标准 ResNet18 state_dict 或本程序模型）；诊断可显式 --allow-random-init")
+    device = config["training"]["device"]
+    return {"params": {k: v.to(device).detach().requires_grad_(True) for k, v in params.items()},
+            "buffers": {k: v.to(device) for k, v in buffers.items()}}, provenance
+
+
+def frozen_bn(x: Any, model: dict, name: str) -> Any:
+    """固定统计量的 BatchNorm；仿射参数仍求梯度，不改变 buffers。"""
+    from torch.nn import functional as F
+    p, b = model["params"], model["buffers"]
+    return F.batch_norm(x, b[name + ".running_mean"], b[name + ".running_var"],
+                        p[name + ".weight"], p[name + ".bias"], training=False, eps=1e-5)
+
+
+def residual_block(x: Any, model: dict, index: int) -> Any:
+    """一个完整残差块；输入/输出 Tensor，不修改 Model。"""
+    from torch.nn import functional as F
+    name, p = block_name(index), model["params"]
+    stride = BLOCKS[index][2]
+    identity = x
+    if stride == 2:
+        identity = frozen_bn(F.conv2d(x, p[name + ".downsample.0.weight"], stride=2), model, name + ".downsample.1")
+    y = F.relu(frozen_bn(F.conv2d(x, p[name + ".conv1.weight"], stride=stride, padding=1), model, name + ".bn1"))
+    y = frozen_bn(F.conv2d(y, p[name + ".conv2.weight"], padding=1), model, name + ".bn2")
+    return F.relu(y + identity)
+
+
+def validate_split_point(split: int) -> None:
+    """切点沿用客户端残差块数编号，只允许整组边界。"""
+    if isinstance(split, bool) or not isinstance(split, (int, np.integer)) or split not in SPLIT_POINTS:
+        raise ValueError(f"split 必须是组边界 {SPLIT_POINTS} 之一，收到 {split}")
+
+
+def forward_prefix(model: dict, images: Any, split: int) -> Any:
+    """执行 stem + 前 split 个完整残差块，返回有计算图的激活 Tensor。"""
+    from torch.nn import functional as F
+    validate_split_point(split)
+    x = F.conv2d(images, model["params"]["conv1.weight"], stride=2, padding=3)
+    x = F.max_pool2d(F.relu(frozen_bn(x, model, "bn1")), 3, 2, 1)
+    for i in range(split):
+        x = residual_block(x, model, i)
+    return x
+
+
+def forward_suffix(model: dict, activation: Any, split: int) -> Any:
+    """执行剩余残差块 + 池化/分类头，返回 logits [B,9]。"""
+    from torch.nn import functional as F
+    validate_split_point(split)
+    x = activation
+    for i in range(split, len(BLOCKS)):
+        x = residual_block(x, model, i)
+    x = F.adaptive_avg_pool2d(x, (1, 1)).flatten(1)
+    return F.linear(x, model["params"]["fc.weight"], model["params"]["fc.bias"])
+
+
+def prefix_keys(model: dict, split: int) -> list[str]:
+    """返回客户端可训练参数键；BN 固定 buffers 已预部署，不计重复通信。"""
+    validate_split_point(split)
+    prefixes = ["conv1.", "bn1."] + [block_name(i) + "." for i in range(split)]
+    return [name for name in model["params"] if any(name.startswith(p) for p in prefixes)]
+
+
+def split_gradients(model: dict, images: Any, labels: Any, split: int) -> tuple[dict, dict]:
+    """显式模拟分割学习，返回 (全模型梯度字典, 批次统计)，不更新参数。
+
+    images 为 float32 [B,3,H,W]，labels 为 int64 [B]，split 为 0/2/4/6/8。
+    梯度字典键与 model['params'] 相同；loss 是批次平均交叉熵，correct 是
+    正确样本数，通信量按本批实际 Tensor 大小计 bit，上传还包含标签。
+    autograd.grad 直接返回梯度，不向参数 .grad 累积，函数间没有残留梯度状态。
+    """
+    import torch
+    from torch.nn import functional as F
+    left = prefix_keys(model, split)
+    right = [name for name in model["params"] if name not in set(left)]
+    boundary = forward_prefix(model, images, split)
+    # boundary 保留客户端计算图；received 是服务器收到的独立叶子激活。
+    # detach 阻断跨端自动求导，后面必须显式把 dLoss/dActivation 传回客户端。
+    received = boundary.detach().clone().requires_grad_(True)
+    logits = forward_suffix(model, received, split)
+    loss = F.cross_entropy(logits, labels)
+    if not bool(torch.isfinite(loss)):
+        raise FloatingPointError("批次损失非有限，停止本轮训练")
+    # 先取得服务器后缀参数梯度及激活梯度，再用激活梯度求客户端前缀梯度。
+    # 此时两端参数都没有更新，保持与完整模型同一更新前状态的梯度关系。
+    server_grad = torch.autograd.grad(loss, [model["params"][name] for name in right] + [received])
+    client_grad = torch.autograd.grad(boundary, [model["params"][name] for name in left], grad_outputs=server_grad[-1].detach())
+    grads = dict(zip(left, client_grad)) | dict(zip(right, server_grad[:-1]))
+    return grads, {"loss": float(loss.detach()), "correct": int((logits.argmax(1) == labels).sum()),
+                   "samples": len(labels), "activation_bits": boundary.numel() * boundary.element_size() * 8 + labels.numel() * labels.element_size() * 8,
+                   "gradient_bits": server_grad[-1].numel() * server_grad[-1].element_size() * 8}
+
+
+def sgd_step(model: dict, gradients: dict, step: float) -> dict:
+    """式(19)：返回新 Model；无 momentum/weight decay，原参数及 buffers 不被写入。"""
+    import torch
+    with torch.no_grad():
+        params = {k: (v - step * gradients[k]).detach().requires_grad_(True) for k, v in model["params"].items()}
+    if not all(bool(torch.isfinite(v).all()) for v in params.values()):
+        raise FloatingPointError("SGD 产生非有限参数，停止本次任务")
+    return {"params": params, "buffers": model["buffers"]}
+
+
+def train_client_epoch(model: dict, data: dict, indices: list[int], split: int,
+                       epoch: int, uid: int, config: dict) -> tuple[dict, dict]:
+    """遍历一次冻结快照，返回 (新 Model, 本轮统计)，尾批按真实大小计算。
+
+    indices 必须是当前 UAV 的轮初快照，函数不会查询中途新释放的样本。
+    epoch 为 1 起始轮号，uid 为 0 起始设备号，两者决定独立可复现的 batch 顺序。
+    loss/accuracy 按样本数加权；step_sum 应等于 epoch_step_size；通信量是
+    本轮激活/标签和梯度的累计 bit，不包含由系统聚合阶段单独计量的前缀参数。
+    """
+    rng = np.random.default_rng(np.random.SeedSequence([config["seed"], epoch, uid]))
+    order = rng.permutation(indices).tolist()
+    state, loss_sum, correct, step_sum, up, down = model, 0.0, 0, 0.0, 0, 0
+    batch_size = config["training"]["batch_size"]
+    for offset in range(0, len(order), batch_size):
+        batch = order[offset:offset + batch_size]
+        x, y = load_batch(data, batch, config["training"]["device"])
+        gradients, metrics = split_gradients(state, x, y, split)
+        # 每个样本对本轮累计步长的权重相同；例如 D=3、batch_size=2 时，
+        # 两批使用 2*eta/3 和 eta/3，数据增长不会自动扩大整轮累计步长。
+        step = config["training"]["epoch_step_size"] * len(batch) / len(order)
+        state = sgd_step(state, gradients, step)
+        loss_sum += metrics["loss"] * len(batch)
+        correct += metrics["correct"]
+        step_sum += step
+        up += metrics["activation_bits"]
+        down += metrics["gradient_bits"]
+    return state, {"loss": loss_sum / len(order), "accuracy": correct / len(order),
+                   "samples": len(order), "step_sum": step_sum, "activation_bits": up, "gradient_bits": down}
+
+
+def aggregate_models(models: list[dict], counts: list[int]) -> dict:
+    """式(5)：按 counts 加权平均完整模型，返回新 Model，不修改各分支。
+
+    不同切点只是同一完整参数字典的执行分界，所以可以按同名参数直接平均。
+    本研究各机样本数相同，权重退化为 1/N；保留 counts 接口便于核验通用情况。
+    BN 统计量冻结且应完全一致，检查通过后共享 buffers，不对计数做浮点平均。
+    """
+    import torch
+    if len(models) != len(counts) or not models or min(counts) <= 0:
+        raise ValueError("聚合模型数/权重不合法")
+    weights = np.asarray(counts, dtype=float) / sum(counts)
+    for m in models[1:]:
+        if m["params"].keys() != models[0]["params"].keys():
+            raise ValueError("聚合模型结构不一致")
+        if any(not torch.equal(v, m["buffers"][k]) for k, v in models[0]["buffers"].items()):
+            raise ValueError("BN 固定统计量不一致")
+    with torch.no_grad():
+        params = {key: sum(float(w) * m["params"][key] for w, m in zip(weights, models)).detach().requires_grad_(True)
+                  for key in models[0]["params"]}
+    return {"params": params, "buffers": models[0]["buffers"]}
+
+
+def evaluate_model(model: dict, data: dict, indices: list[int], config: dict) -> dict:
+    """I/O + 推理：返回 loss/accuracy/macro_f1/confusion；测试集只在任务末调用。"""
+    import torch
+    from torch.nn import functional as F
+    confusion = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
+    loss_sum = 0.0
+    with torch.no_grad():
+        for offset in range(0, len(indices), config["training"]["batch_size"]):
+            ids = indices[offset:offset + config["training"]["batch_size"]]
+            x, y = load_batch(data, ids, config["training"]["device"])
+            logits = forward_suffix(model, forward_prefix(model, x, 0), 0)
+            batch_loss = F.cross_entropy(logits, y, reduction="sum")
+            if not bool(torch.isfinite(batch_loss)):
+                raise FloatingPointError("评价损失非有限，模型不可用于评价")
+            loss_sum += float(batch_loss)
+            for truth, pred in zip(y.cpu().tolist(), logits.argmax(1).cpu().tolist()):
+                confusion[truth, pred] += 1
+    denominator = confusion.sum(0) + confusion.sum(1)
+    f1 = np.divide(2 * np.diag(confusion), denominator, out=np.zeros(len(CLASSES)), where=denominator > 0)
+    return {"loss": loss_sum / len(indices), "accuracy": float(np.trace(confusion) / len(indices)),
+            "macro_f1": float(f1.mean()), "confusion": confusion, "samples": len(indices)}
+
+
+def profile_splits(model: dict, config: dict) -> dict:
+    """统计五切点前后向 FLOPs 与真实 bit，乘显式硬件系数得到等效周期。
+
+    FLOP 计数不是硬件实测。仅覆盖 FlopCounterMode 支持算子，不含优化器、
+    数据读取、内存搬运及未支持算子；metadata 始终记录此限制。
+    """
+    import torch
+    from torch.nn import functional as F
+    from torch.utils.flop_counter import FlopCounterMode
+    size, device = config["data"]["image_size"], config["training"]["device"]
+    x = torch.linspace(-1, 1, 3 * size * size, device=device).reshape(1, 3, size, size)
+    y = torch.zeros(1, dtype=torch.long, device=device)
+    rows = []
+    for split in SPLIT_POINTS:
+        left = prefix_keys(model, split)
+        right = [key for key in model["params"] if key not in set(left)]
+        with FlopCounterMode(display=False) as counter:
+            boundary = forward_prefix(model, x, split)
+        client_flops = counter.get_total_flops()
+        received = boundary.detach().clone().requires_grad_(True)
+        with FlopCounterMode(display=False) as counter:
+            logits = forward_suffix(model, received, split)
+            loss = F.cross_entropy(logits, y)
+            gs = torch.autograd.grad(loss, [model["params"][key] for key in right] + [received])
+        server_flops = counter.get_total_flops()
+        with FlopCounterMode(display=False) as counter:
+            torch.autograd.grad(boundary, [model["params"][key] for key in left], grad_outputs=gs[-1])
+        client_flops += counter.get_total_flops()
+        rows.append({"client_flops": client_flops, "server_flops": server_flops,
+                     "server_cycles": server_flops * config["server"]["cycles_per_flop"],
+                     "activation_bits": boundary.numel() * boundary.element_size() * 8 + 64,
+                     "gradient_bits": boundary.numel() * boundary.element_size() * 8,
+                     "prefix_bits": sum(model["params"][key].numel() * model["params"][key].element_size() * 8 for key in left)})
+    profile = {key: np.array([row[key] for row in rows], dtype=float) for key in rows[0]}
+    conversion = np.asarray(config["uav"]["cycles_per_flop"], dtype=float)
+    profile["client_cycles"] = (profile["client_flops"] * conversion if conversion.ndim == 0
+                                else conversion[:, None] * profile["client_flops"])
+    profile["metadata"] = {"split_points": list(SPLIT_POINTS),
+                           "uav_cycles_per_flop": uav_parameter(config, "cycles_per_flop"),
+                           "method": "supported_operator_FLOPs_times_configured_cycles_per_FLOP",
+                           "hardware_measured": False, "image_size": size, "dtype": "float32",
+                           "labels": "int64", "prefix_payload": "trainable_parameters_only_frozen_BN_predeployed",
+                           "exclusions": "unsupported operators, optimizer updates, memory/I/O/runtime overhead"}
+    return profile
+
+
+def grouped_profile(profile: dict) -> dict:
+    """统一实测/旧版画像到五个组边界，并保留各列对应的残差块数。"""
+    metadata = profile.get("metadata", {})
+    points = metadata.get("split_points")
+    if points is None:
+        # 旧版九列画像按每个块后的位置排列，新版五列按组排列。
+        points = range(len(BLOCKS) + 1) if np.shape(profile["client_cycles"])[-1:] == (9,) else SPLIT_POINTS
+    points = tuple(points)
+    if points not in (SPLIT_POINTS, tuple(range(len(BLOCKS) + 1))):
+        raise ValueError("画像的切点顺序与 ResNet18 组边界不一致")
+    columns = [points.index(cut) for cut in SPLIT_POINTS]
+    result = dict(profile)
+    fields = ("client_cycles", "server_cycles", "activation_bits", "gradient_bits", "prefix_bits")
+    for key in fields + tuple(k for k in ("client_flops", "server_flops") if k in profile):
+        values = np.asarray(profile[key], dtype=float)
+        valid_shape = values.shape == (len(points),)
+        if key == "client_cycles":
+            valid_shape = values.ndim in (1, 2) and values.shape[-1] == len(points)
+        if not valid_shape or not np.isfinite(values).all() or np.any(values <= 0):
+            raise ValueError(f"画像 {key} 的长度必须与切点数一致且数值为有限正数")
+        result[key] = values[..., columns]
+    result["metadata"] = {**metadata, "split_points": list(SPLIT_POINTS)}
+    return result
+
+
+# 4. 给定轨迹、平均大尺度信道与原始成本 ------------------------------------------
+def channel_at(physical_s: float, config: dict) -> dict:
+    """式(6)—(8)：给定偏心圆巡逻轨迹的确定性平均功率增益；无小尺度随机衰落。"""
+    n, t, c = config["num_uavs"], config["trajectory"], config["channel"]
+    radius = patrol_radii(config)
+    phase = 2 * np.pi * np.arange(n) / n
+    angle = phase + t["speed_m_s"] * physical_s / radius
+    xyz = np.column_stack((radius * np.cos(angle) + t["center_offset_m"] * np.cos(phase),
+                           radius * np.sin(angle) + t["center_offset_m"] * np.sin(phase),
+                           np.full(n, t["altitude_m"])))
+    delta = xyz - np.asarray(t["server_xyz_m"])
+    distance = np.linalg.norm(delta, axis=1)
+    elevation = np.degrees(np.arcsin(np.clip(delta[:, 2] / distance, -1, 1)))
+    probability = 1 / (1 + c["los_a"] * np.exp(-c["los_b"] * (elevation - c["los_a"])))
+    gain = probability * c["beta_l"] * distance ** (-c["alpha_l"]) + (1 - probability) * c["beta_n"] * distance ** (-c["alpha_n"])
+    return {"xyz_m": xyz, "distance_m": distance, "elevation_deg": elevation, "los_probability": probability, "gain": gain}
+
+
+def uav_parameter(config: dict, key: str) -> np.ndarray:
+    """将共享标量或逐机列表统一为长度 N 的只读数值视图。"""
+    return np.broadcast_to(np.asarray(config["uav"][key], dtype=float), (config["num_uavs"],))
+
+
+def client_cycle_table(profile: dict, num_uavs: int) -> np.ndarray:
+    """旧画像共享五列，新画像每机一行。"""
+    values = np.asarray(profile["client_cycles"], dtype=float)
+    if values.shape not in ((len(SPLIT_POINTS),), (num_uavs, len(SPLIT_POINTS))):
+        raise ValueError("客户端周期画像必须为 [5] 或 [num_uavs,5]")
+    return np.broadcast_to(values, (num_uavs, len(SPLIT_POINTS)))
+
+
+def maximum_frequency(config: dict) -> np.ndarray:
+    """式(9)：由计算功率上限恢复 f_max，返回 Hz。"""
+    return (uav_parameter(config, "compute_power_max_w") / uav_parameter(config, "kappa")) ** (1 / 3)
+
+
+def reference_resources(config: dict) -> dict:
+    """返回独立参考配置；其可行性必须由 audit_resources 判定。"""
+    n = config["num_uavs"]
+    return {"frequency_hz": maximum_frequency(config) * config["reference"]["frequency_fraction"],
+            "power_w": uav_parameter(config, "power_max_w") * config["reference"]["power_fraction"],
+            "up_hz": np.full(n, config["radio"]["total_up_hz"] / n),
+            "down_hz": np.full(n, config["radio"]["total_down_hz"] / n)}
+
+
+def shannon_rate(bandwidth_hz: Any, power_w: Any, gain: Any, noise_psd: float) -> np.ndarray:
+    """式(8)，返回 bit/s；带宽内噪声=N0*B。"""
+    b, p, h = np.asarray(bandwidth_hz), np.asarray(power_w), np.asarray(gain)
+    if np.any(b <= 0) or np.any(p <= 0) or np.any(h <= 0):
+        raise ValueError("速率输入必须严格为正")
+    return b * np.log1p(p * h / (noise_psd * b)) / np.log(2)
+
+
+def make_problem(epoch: int, count: int, gain: Any, split: Any, next_split: Any,
+                 remaining_j: Any, config: dict) -> dict:
+    """构造当前 epoch 的独立 Problem，供成本计算与资源优化共用。
+
+    count 为每机本轮冻结样本数 D_k；gain、split、remaining_j 均为长度 N。
+    split 是本轮执行的切点，next_split 只决定聚合后新前缀的下发负载。
+    非最终偶数轮必须传 next_split；奇数轮和最终轮必须传 None。这样可以在
+    P2 求解前确定所有通信量，避免求解后才切换模型造成时延/能耗漏算。
+    返回时复制输入数组，后续扣电量或切换切点不会修改这份问题快照。
+    """
+    n, epochs = config["num_uavs"], config["training"]["epochs"]
+    aggregate, final = epoch % 2 == 0, epoch == epochs
+    if not 1 <= epoch <= epochs or count < 1:
+        raise ValueError("epoch/count 越界")
+    s = np.asarray(split, dtype=int)
+    q = None if next_split is None else np.asarray(next_split, dtype=int)
+    if not np.array_equal(np.asarray(split), s) or (q is not None and not np.array_equal(np.asarray(next_split), q)):
+        raise ValueError("切分编号必须为整数")
+    if s.shape != (n,) or not np.isin(s, SPLIT_POINTS).all():
+        raise ValueError("当前切分向量非法")
+    if aggregate and not final and (q is None or q.shape != (n,) or not np.isin(q, SPLIT_POINTS).all()):
+        raise ValueError("非最终聚合轮需要下一周期切分向量")
+    if (not aggregate or final) and q is not None:
+        raise ValueError("非聚合轮或最终轮不应传 next_split")
+    gain, remaining = np.asarray(gain, dtype=float), np.asarray(remaining_j, dtype=float)
+    if gain.shape != (n,) or remaining.shape != (n,) or not np.isfinite(gain).all() or np.any(gain <= 0) or not np.isfinite(remaining).all():
+        raise ValueError("信道或剩余电量形状/数值不合法")
+    return {"epoch": epoch, "count": count, "gain": gain.copy(), "split": s.copy(),
+            "next_split": None if q is None else q.copy(), "remaining_j": remaining.copy(),
+            "aggregate": aggregate, "final": final}
+
+
+def loads(problem: dict, profile: dict) -> dict:
+    """返回当前轮各机周期数、训练通信量、同步通信量；最终下发严格为零。"""
+    s, d = problem["split"] // BLOCKS_PER_GROUP, problem["count"]
+    zero = np.zeros(len(s))
+    # 计算/激活/梯度画像按“单样本”给出，乘 D_k 后才是整轮负载。
+    # prefix_bits 已是一份完整前缀的大小，只在聚合时传一次，不再乘 D_k。
+    # upload 用当前 s；download 用 next_split，二者可能跨越不同残差块边界。
+    return {"client_cycles": d * client_cycle_table(profile, len(s))[np.arange(len(s)), s],
+            "server_cycles": d * profile["server_cycles"][s],
+            "activation_bits": d * profile["activation_bits"][s], "gradient_bits": d * profile["gradient_bits"][s],
+            "upload_bits": profile["prefix_bits"][s] if problem["aggregate"] else zero,
+            "download_bits": profile["prefix_bits"][problem["next_split"] // BLOCKS_PER_GROUP] if problem["next_split"] is not None else zero}
+
+
+def evaluate_resources(problem: dict, resources: dict, profile: dict, config: dict) -> dict:
+    """用原式(10)—(17)计算真实模型成本，返回可直接记录的 metrics 字典。
+
+    Resources 的 frequency_hz/power_w/up_hz/down_hz 均为长度 N 的物理量数组。
+    duration_s、total_energy_j、server_energy_j 为标量；uav_energy_j、各链路
+    速率及 components 中各能耗项为长度 N 的数组；stage_times 为阶段标量。
+    此处的“真实”指原始数学模型值，用来核验凸上界解，不是硬件功耗实测。
+    """
+    l = loads(problem, profile)
+    f, p = resources["frequency_hz"], resources["power_w"]
+    e, u, c = config["server"], config["uav"], config["channel"]
+    ru = shannon_rate(resources["up_hz"], p, problem["gain"], c["noise_psd_w_hz"])
+    rd = shannon_rate(resources["down_hz"], e["downlink_power_w"], problem["gain"], c["noise_psd_w_hz"])
+    tc, te = l["client_cycles"] / f, l["server_cycles"] / e["frequency_hz"]
+    ta, tg, tu, td = l["activation_bits"] / ru, l["gradient_bits"] / rd, l["upload_bits"] / ru, l["download_bits"] / rd
+    components = {"uav_compute_j": uav_parameter(config, "kappa") * l["client_cycles"] * f ** 2,
+                  "activation_upload_j": p * ta, "prefix_upload_j": p * tu,
+                  "server_compute_j": e["kappa"] * e["frequency_hz"] ** 2 * l["server_cycles"],
+                  "gradient_download_j": e["downlink_power_w"] * tg,
+                  "prefix_download_j": e["downlink_power_w"] * td}
+    # UAV 电池只扣本地计算和两类上行；下行发射能耗属于服务器。
+    # 聚合处理能耗为服务器侧一次性开销，不分摊进各 UAV 的训练电池。
+    uav_energy = components["uav_compute_j"] + components["activation_upload_j"] + components["prefix_upload_j"]
+    agg_time = e["aggregation_time_s"] if problem["aggregate"] else 0.0
+    agg_energy = e["aggregation_energy_j"] if problem["aggregate"] else 0.0
+    server_energy = float(sum(np.sum(components[k]) for k in ("server_compute_j", "gradient_download_j", "prefix_download_j")) + agg_energy)
+    # 同步屏障使每阶段都要等待该阶段最慢分支，且各阶段最慢的 UAV 可以不同。
+    # 因而要 sum(max(stage_n))；不能把四个阶段相加后只取一次 max。
+    stage_times = {"split_training_s": float(np.max(tc + te + ta + tg)), "prefix_upload_s": float(np.max(tu)),
+                   "aggregation_s": agg_time, "prefix_download_s": float(np.max(td))}
+    return {"duration_s": sum(stage_times.values()), "total_energy_j": float(uav_energy.sum() + server_energy),
+            "uav_energy_j": uav_energy, "server_energy_j": server_energy, "components": components,
+            "aggregation_energy_j": agg_energy, "stage_times": stage_times,
+            "branch_training_s": tc + te + ta + tg, "up_rate_bps": ru, "down_rate_bps": rd,
+            "compute_power_w": uav_parameter(config, "kappa") * f ** 3, "loads": l}
+
+
+def audit_resources(problem: dict, resources: dict, profile: dict, config: dict) -> dict:
+    """原始约束核验，返回 ok、无量纲最大违约与带单位的物理残差。
+
+    残差按“实际值 - 上界”定义：正数表示违约，负数表示尚有余量。为让 Hz、W、
+    J、s 可以共用数值容差，分别除以对应上界，再取正部最大值。无效资源数组
+    会直接返回 ok=False/reason，不计算可能含除零的速率；调用方先读 ok。
+    求解器报告 optimal/optimal_inaccurate 后，也必须通过这一原式检查。
+    """
+    n, tol = config["num_uavs"], config["optimization"]["feasibility_tolerance"]
+    if any(np.shape(v) != (n,) or not np.isfinite(v).all() or np.any(np.asarray(v) <= 0) for v in resources.values()):
+        return {"ok": False, "reason": "nonpositive_or_invalid_resources"}
+    m = evaluate_resources(problem, resources, profile, config)
+    residuals = {"deadline_s": m["duration_s"] - config["task"]["epoch_deadline_s"],
+                 "battery_j": m["uav_energy_j"] - problem["remaining_j"],
+                 "frequency_hz": resources["frequency_hz"] - maximum_frequency(config),
+                 "power_w": resources["power_w"] - uav_parameter(config, "power_max_w"),
+                 "up_hz": float(np.sum(resources["up_hz"])) - config["radio"]["total_up_hz"],
+                 "down_hz": float(np.sum(resources["down_hz"])) - config["radio"]["total_down_hz"]}
+    normalized = [residuals["deadline_s"] / config["task"]["epoch_deadline_s"],
+                  float(np.max(residuals["battery_j"] / np.maximum(1.0, problem["remaining_j"]))),
+                  float(np.max(residuals["frequency_hz"] / maximum_frequency(config))),
+                  float(np.max(residuals["power_w"] / uav_parameter(config, "power_max_w"))),
+                  residuals["up_hz"] / config["radio"]["total_up_hz"], residuals["down_hz"] / config["radio"]["total_down_hz"]]
+    violation = max(0.0, *normalized)
+    return {"ok": bool(violation <= tol and np.isfinite(m["total_energy_j"])),
+            "normalized_violation": violation, "residuals": residuals}
+
+
+# 5. 单 epoch 凸子问题、可行初始化、逆二次迭代 ----------------------------------
+def convex_subproblem(problem: dict, profile: dict, config: dict,
+                      tangent: dict | None = None, fixed_power: float | None = None) -> dict:
+    """求解一次凸问题并返回资源/求解状态。
+
+    tangent != None：式(31)，用相切点归一化后的 psi=2*sqrt(R/R0)-p/p0，
+    上行上界=E_up0/psi，与式(29)—(31)完全等价，避免 y 的数量级病态。
+    fixed_power != None：固定发射功率的凸 Phase-I，最小化时延/电量松弛；
+    只用于寻找原问题可行点，找不到不构成全局不可行证明。
+
+    tangent 为已经验证可行的 Resources；fixed_power 是 p_max 的比例，两者
+    必须且只能提供一个。输出 ok 指原约束也已通过，而不只是求解器有数值解。
+    成功时 resources 恢复为 Hz/W，epigraph_s 恢复为秒；status/warnings 保存
+    求解器状态。失败结果可能没有 resources/audit，调用方需先检查 ok。
+    """
+    import cvxpy as cp
+    if (tangent is None) == (fixed_power is None):
+        raise ValueError("必须且只能指定 tangent 或 fixed_power")
+    n, o, u, e, radio = config["num_uavs"], config["optimization"], config["uav"], config["server"], config["radio"]
+    l, floor = loads(problem, profile), o["positive_floor"]
+    # 优化变量 f=f_actual/f_max，p=p_actual/p_max，bu/bd=B_actual/B_total。
+    # 都在接近 0..1 的尺度内求解，避免直接把 GHz、MHz 与 W 混入同一变量向量。
+    f = cp.Variable(n, name="frequency_fraction")
+    bu, bd = cp.Variable(n, name="up_fraction"), cp.Variable(n, name="down_fraction")
+    p = cp.Variable(n, name="power_fraction") if tangent is not None else np.full(n, fixed_power)
+    # tau 内部是“阶段时长 / 本轮期限”的无量纲上界，返回时才乘 deadline。
+    # 奇数轮仅有 tau[0]；中间聚合轮有训练/上传/下发三项；末轮没有下发项。
+    # 固定聚合处理时长直接加入总时限，不需要额外决策变量。
+    tau = cp.Variable(1 + int(problem["aggregate"]) + int(problem["next_split"] is not None), nonneg=True, name="stage_s")
+    noise, gain, fmax = config["channel"]["noise_psd_w_hz"], problem["gain"], maximum_frequency(config)
+    pmax, kappa = uav_parameter(config, "power_max_w"), uav_parameter(config, "kappa")
+    # -rel_entr(b,b+a*p)=b*log(1+a*p/b) 是联合凹的 Shannon perspective。
+    ru = -(radio["total_up_hz"] / 1e6) * cp.rel_entr(bu, bu + cp.multiply(gain * pmax / (noise * radio["total_up_hz"]), p)) / np.log(2)
+    rd = -(radio["total_down_hz"] / 1e6) * cp.rel_entr(bd, bd + gain * e["downlink_power_w"] / (noise * radio["total_down_hz"])) / np.log(2)
+    invru, invrd = cp.inv_pos(ru), cp.inv_pos(rd)
+    ec = cp.multiply(kappa * l["client_cycles"] * fmax ** 2, cp.square(f))
+    # 上面的 ru/rd 用 Mbit/s，这里的载荷同步除以 1e6，除法得到的仍然是秒。
+    # 同一个 epoch 的特征通信与模型同步共享当前资源，能量项可先合并载荷；
+    # 时延项仍必须在下方按各阶段分别施加上图约束。
+    up_mbit = (l["activation_bits"] + l["upload_bits"]) / 1e6
+    down_mbit = (l["gradient_bits"] + l["download_bits"]) / 1e6
+    constraints = [f >= floor, f <= 1, bu >= floor, bd >= floor, cp.sum(bu) <= 1, cp.sum(bd) <= 1]
+    if tangent is not None:
+        m0 = evaluate_resources(problem, tangent, profile, config)
+        ru0 = m0["up_rate_bps"] / 1e6
+        p0 = tangent["power_w"]
+        # 在当前点 R=R0、p=p0 时 psi=1，上界 E_up0/psi 与原上行能量相切。
+        # 固定当前点后，sqrt(R/R0) 为凹函数，减去线性功率仍为凹函数；
+        # 正凹函数的倒数是凸函数，CVXPY 可按 DCP 规则处理。
+        psi = 2 * cp.sqrt(cp.multiply(1 / ru0, ru)) - cp.multiply(pmax / p0, p)
+        eup0 = up_mbit * p0 / ru0
+        eup = cp.multiply(eup0, cp.inv_pos(psi))
+        constraints += [p >= floor, p <= 1, psi >= floor]
+        scale = max(1e-6, m0["total_energy_j"] / n)
+        slack = 0.0
+    else:
+        eup = cp.multiply(up_mbit * pmax * fixed_power, invru)
+        scale = max(1e-6, float(np.sum(kappa * l["client_cycles"] * fmax ** 2)) / n)
+        slack = cp.Variable(nonneg=True, name="phase_one_slack")
+    edown = cp.multiply(e["downlink_power_w"] * down_mbit, invrd)
+    train_time = cp.multiply(l["client_cycles"] / fmax, cp.inv_pos(f)) + l["server_cycles"] / e["frequency_hz"]
+    train_time += cp.multiply(l["activation_bits"] / 1e6, invru) + cp.multiply(l["gradient_bits"] / 1e6, invrd)
+    deadline = config["task"]["epoch_deadline_s"]
+    constraints += [train_time / deadline <= tau[0]]
+    if problem["aggregate"]:
+        constraints += [cp.multiply(l["upload_bits"] / 1e6 / deadline, invru) <= tau[1]]
+    if problem["next_split"] is not None:
+        constraints += [cp.multiply(l["download_bits"] / 1e6 / deadline, invrd) <= tau[2]]
+    agg_time = e["aggregation_time_s"] if problem["aggregate"] else 0.0
+    battery_scale = np.maximum(scale, np.abs(problem["remaining_j"]))
+    # 正常优化 slack=0；Phase-I 同时放宽归一化时限与每机电量，并优先压低 slack。
+    # 即使 Phase-I 找到了较小松弛，也只有 audit_resources 通过才可用作可行初值。
+    constraints += [cp.sum(tau) + agg_time / deadline <= 1 + slack,
+                    cp.multiply(1 / battery_scale, ec + eup) <= problem["remaining_j"] / battery_scale + slack]
+    # 固定切分时，服务器后缀计算及聚合处理能耗对本次连续变量优化是常数。
+    # 此目标省略它们以简化求解；evaluate_resources 汇总时会完整加回。
+    objective = cp.sum(ec + eup + edown) / scale
+    objective = objective if tangent is not None else slack + 1e-8 * objective
+    program = cp.Problem(cp.Minimize(objective), constraints)
+    if not program.is_dcp():
+        raise RuntimeError("凸子问题没有通过 CVXPY DCP 校验")
+    if o["solver"] not in cp.installed_solvers():
+        raise RuntimeError(f"求解器 {o['solver']} 不可用；当前 {cp.installed_solvers()}")
+    start = time.perf_counter()
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            options = {"max_iter": 300, "tol_gap_abs": 1e-9, "tol_gap_rel": 1e-9, "tol_feas": 1e-9} if o["solver"] == "CLARABEL" else {}
+            program.solve(solver=o["solver"], **options)
+        notes = [str(w.message) for w in caught]
+    except cp.error.SolverError as exc:
+        return {"ok": False, "status": "solver_error", "message": str(exc), "wall_s": time.perf_counter() - start}
+    result = {"ok": False, "status": program.status, "warnings": notes, "dcp": True,
+              "wall_s": time.perf_counter() - start}
+    if program.status not in (cp.OPTIMAL, cp.OPTIMAL_INACCURATE) or any(v.value is None for v in (f, bu, bd)):
+        return result
+    power_fraction = np.asarray(p.value if tangent is not None else p)
+    resources = {"frequency_hz": np.asarray(f.value) * fmax, "power_w": power_fraction * pmax,
+                 "up_hz": np.asarray(bu.value) * radio["total_up_hz"], "down_hz": np.asarray(bd.value) * radio["total_down_hz"]}
+    audit = audit_resources(problem, resources, profile, config)
+    result.update({"ok": audit["ok"], "resources": resources, "audit": audit, "epigraph_s": np.asarray(tau.value) * deadline,
+                   "phase_slack": float(slack.value) if tangent is None else 0.0})
+    return result
+
+
+def feasible_initialization(problem: dict, profile: dict, config: dict, previous: dict | None = None) -> dict:
+    """返回 {ok, resources, attempts}；失败还包含明确的 status。
+
+    尝试顺序为上一可行配置、初始参考配置、最大频率/功率等分带宽，最后在若干
+    固定功率比例下解凸 Phase-I。每个候选均使用当前 Problem 重新审计，不能
+    因它上一轮可行就直接复用。attempts 记录全部尝试，便于区分初始化失败与
+    后续凸迭代失败。此有限初始化搜索不能提供原非凸问题的不可行证明。
+    """
+    attempts = []
+    for name, candidate in (("previous", previous), ("reference", reference_resources(config))):
+        if candidate is None:
+            continue
+        audit = audit_resources(problem, candidate, profile, config)
+        attempts.append({"method": name, "audit": audit})
+        if audit["ok"]:
+            return {"ok": True, "resources": copy.deepcopy(candidate), "attempts": attempts}
+    maximum = reference_resources(config)
+    maximum["frequency_hz"][:] = maximum_frequency(config)
+    maximum["power_w"][:] = uav_parameter(config, "power_max_w")
+    audit = audit_resources(problem, maximum, profile, config)
+    attempts.append({"method": "maximum_equal_bandwidth", "audit": audit})
+    if audit["ok"]:
+        return {"ok": True, "resources": maximum, "attempts": attempts}
+    for fraction in (1.0, 0.3, 0.1, 0.03, 0.01, 0.001):
+        result = convex_subproblem(problem, profile, config, fixed_power=max(fraction, config["optimization"]["positive_floor"]))
+        attempts.append({"method": "fixed_power_phase_one", "power_fraction": fraction,
+                         **{k: v for k, v in result.items() if k != "resources"}})
+        if result["ok"]:
+            return {"ok": True, "resources": result["resources"], "attempts": attempts}
+    return {"ok": False, "resources": None, "attempts": attempts, "status": "feasible_initialization_not_found"}
+
+
+def solve_resources(problem: dict, profile: dict, config: dict, previous: dict | None = None,
+                    *, retain_feasible: bool = False) -> dict:
+    """式(30)/(31)交替求解，返回 SolveResult，接受步真实可行且真实目标不增。
+
+    trace[0] 是已验证初值，此后每项记录真实能耗、相对下降、原约束审计及
+    是否接受；并非所有日志项都会被执行。ok=True 时 resources/metrics 可用于
+    本轮执行，但 status='iteration_limit_feasible' 只表示达到上限仍然可行。
+    ok=False 时返回 resources=None，由上层尝试下一候选或报告任务未完成。
+    retain_feasible 用于窗口能耗比较。迭代失败时保留最近通过原约束审计的点并记录原因。
+    """
+    start = time.perf_counter()
+    initialization = feasible_initialization(problem, profile, config, previous)
+    trace = []
+    def result(ok, status, resources=None):
+        return {"ok": ok, "status": status, "resources": resources,
+                "metrics": evaluate_resources(problem, resources, profile, config) if resources is not None else None,
+                "trace": trace, "initialization": initialization["attempts"], "wall_s": time.perf_counter() - start}
+    if not initialization["ok"]:
+        return result(False, "feasible_initialization_not_found")
+    current = initialization["resources"]
+    energy = evaluate_resources(problem, current, profile, config)["total_energy_j"]
+    trace.append({"iteration": 0, "energy_j": energy, "audit": audit_resources(problem, current, profile, config)})
+    for iteration in range(1, config["optimization"]["max_iterations"] + 1):
+        proposed = convex_subproblem(problem, profile, config, tangent=current)
+        if not proposed["ok"]:
+            trace.append({"iteration": iteration, "accepted": False, "subproblem": proposed})
+            if retain_feasible:
+                return result(True, "subproblem_failed_previous_feasible", current)
+            return result(False, "convex_subproblem_failed")
+        candidate = proposed["resources"]
+        # 停止条件和接受条件均依据原始总能量，而不是随切线更新的凸上界目标。
+        # 分母防止能量接近零时出现除零；每步还独立通过了原始约束核验。
+        metrics = evaluate_resources(problem, candidate, profile, config)
+        new_energy = metrics["total_energy_j"]
+        relative = (energy - new_energy) / max(abs(energy), 1e-12)
+        entry = {"iteration": iteration, "energy_j": new_energy, "relative_decrease": relative,
+                 "solver_status": proposed["status"], "audit": proposed["audit"],
+                 "solver_wall_s": proposed["wall_s"], "warnings": proposed["warnings"]}
+        if new_energy > energy:
+            entry["accepted"] = False
+            trace.append(entry)
+            # 数值误差范围内保留前一个已验证的可行点；不能把升高的点写入执行状态。
+            if -relative <= config["optimization"]["relative_tolerance"]:
+                return result(True, "numerical_stationary_previous_feasible", current)
+            if retain_feasible:
+                return result(True, "objective_increased_previous_feasible", current)
+            return result(False, "true_objective_increased")
+        entry["accepted"] = True
+        trace.append(entry)
+        current, energy = candidate, new_energy
+        if relative <= config["optimization"]["relative_tolerance"]:
+            return result(True, "converged", current)
+    return result(True, "iteration_limit_feasible", current)
+
+
+# 6. 窗口切分、参考评分、离散可行性 --------------------------------------------
+def reference_scores(count: int, gain: np.ndarray, resources: dict, profile: dict,
+                     first_cycle: bool, config: dict) -> np.ndarray:
+    """式(26)：返回 [N,5] 参考能耗评分矩阵，元素是某机某候选的周期评分 J。
+
+    count 是决策时刻每机样本数，gain 是已完成 epoch 窗口的平均信道。
+    预测周期固定使用 m=2*count。首周期模型已预部署，chi=0；后续周期
+    chi=1，计入新前缀下发。与新切点无关的旧前缀上传和聚合常数在评分中
+    省略，但 screen_split 的可行性检查仍包括这些成本。
+    """
+    u, e, noise = config["uav"], config["server"], config["channel"]["noise_psd_w_hz"]
+    ru = shannon_rate(resources["up_hz"], resources["power_w"], gain, noise)[:, None]
+    rd = shannon_rate(resources["down_hz"], e["downlink_power_w"], gain, noise)[:, None]
+    m, chi = 2 * count, int(not first_cycle)
+    compute = m * (uav_parameter(config, "kappa")[:, None] * resources["frequency_hz"][:, None] ** 2
+                   * client_cycle_table(profile, config["num_uavs"])
+                   + e["kappa"] * e["frequency_hz"] ** 2 * profile["server_cycles"])
+    upload = resources["power_w"][:, None] * (m * profile["activation_bits"] + profile["prefix_bits"]) / ru
+    download = e["downlink_power_w"] * (m * profile["gradient_bits"] + chi * profile["prefix_bits"]) / rd
+    return compute + upload + download
+
+
+def screen_split(candidate: np.ndarray, current: np.ndarray, epoch: int, count: int,
+                 gain: np.ndarray, remaining_j: np.ndarray, reference: dict,
+                 profile: dict, config: dict) -> dict:
+    """式(25)：返回参考预测范围的可行性、各轮时长、累计每机能耗及拒绝原因。
+
+    首周期检查 epoch=1,2；在 epoch=2 预选下一周期时，检查当前未执行的
+    聚合轮 2 和未来训练轮 3,4。整个范围固定当前 count 和窗口信道，属于
+    参考预测，不读取未来真实 D(t)/h(t)。电池约束按范围内累计能耗检查。
+    """
+    first = epoch == 1
+    start = 1 if first else epoch + 1
+    horizon = []
+    if not first:
+        horizon.append(make_problem(epoch, count, gain, current, candidate, remaining_j, config))
+    for k in range(start, start + 2):
+        q = candidate if k % 2 == 0 and k < config["training"]["epochs"] else None
+        horizon.append(make_problem(k, count, gain, candidate, q, remaining_j, config))
+    metrics = [evaluate_resources(p, reference, profile, config) for p in horizon]
+    total_uav = sum(m["uav_energy_j"] for m in metrics)
+    times = [m["duration_s"] for m in metrics]
+    tol = config["optimization"]["feasibility_tolerance"]
+    time_ok = max(times) <= config["task"]["epoch_deadline_s"] * (1 + tol)
+    energy_ok = bool(np.all(total_uav <= remaining_j + tol * np.maximum(1, remaining_j)))
+    return {"ok": bool(time_ok and energy_ok), "duration_s": times, "uav_energy_j": total_uav,
+            "reason": "feasible" if time_ok and energy_ok else ("reference_deadline" if not time_ok else "reference_battery")}
+
+
+def forecast_split_energy(cuts, *, config, profile, epoch, count, current, gain, remaining, reference):
+    """在相同预测信道和样本数下逐轮优化并扣电，累计原公式的系统能耗。"""
+    # 即使忽略全部通信，最快 CPU 也无法按时完成的切点可直接排除。
+    tol = config["optimization"]["feasibility_tolerance"]
+    max_clock = maximum_frequency(config) * (1 + tol)
+    compute_seconds = count * (client_cycle_table(profile, config["num_uavs"]) / max_clock[:, None]
+                               + profile["server_cycles"] / config["server"]["frequency_hz"])
+    used_cuts = [cuts] if epoch == 1 else [current, cuts]
+    if any(np.any(compute_seconds[np.arange(config["num_uavs"]), np.asarray(vector) // BLOCKS_PER_GROUP]
+                  > config["task"]["epoch_deadline_s"] * (1 + tol)) for vector in used_cuts):
+        return cuts, None, "compute_time_exceeds_deadline"
+    battery = np.array(remaining, dtype=float)
+    total = 0.0
+    statuses = []
+    last = 2 if epoch == 1 else epoch + 2
+    for k in range(epoch, last + 1):
+        active = current if k == epoch and epoch != 1 else cuts
+        next_cuts = cuts if k % 2 == 0 and k < config["training"]["epochs"] else None
+        problem = make_problem(k, count, gain, active, next_cuts, battery, config)
+        result = solve_resources(problem, profile, config, reference, retain_feasible=True)
+        if not result["ok"]:
+            return cuts, None, f"epoch_{k}: {result['status']}"
+        total += result["metrics"]["total_energy_j"]
+        battery -= result["metrics"]["uav_energy_j"]
+        statuses.append(result["status"])
+    return cuts, total, ", ".join(statuses)
+
+
+def select_splits(epoch: int, count: int, current: np.ndarray, gain_history: list[np.ndarray],
+                  initial_gain: np.ndarray, remaining_j: np.ndarray, reference: dict,
+                  profile: dict, config: dict) -> dict:
+    """穷举组边界组合，以式(25)筛选并按式(26)的参考总能耗排列 P2 候选。
+
+    scores_j 的列按 SPLIT_POINTS 排列。总分相同时优先沿用当前组合，
+    其余同分组合按切点向量的字典序排列。
+    """
+    o, n = config["optimization"], config["num_uavs"]
+    window = 1 if o["strategy"] == "no_window" else o["window_epochs"]
+    gain = np.mean(gain_history[-window:], axis=0) if gain_history else initial_gain.copy()
+    scores = reference_scores(count, gain, reference, profile, epoch == 1, config)
+    current_key = tuple(current)
+    if o["split_objective"] == "optimized_window":
+        evaluate = partial(forecast_split_energy, config=config, profile=profile, epoch=epoch, count=count,
+                           current=current, gain=gain, remaining=remaining_j, reference=reference)
+        combinations = product(SPLIT_POINTS, repeat=n)
+        if o["split_workers"] == 1:
+            rows = list(map(evaluate, combinations))
+        else:
+            with ProcessPoolExecutor(max_workers=o["split_workers"]) as pool:
+                rows = list(pool.map(evaluate, combinations, chunksize=4))
+        ranked = sorted((energy, cuts != current_key, cuts) for cuts, energy, _ in rows if energy is not None)
+        return {"ok": bool(ranked), "status": "optimized_window_complete" if ranked else "no_window_solution_found",
+                "candidates": [np.array(cuts) for _, _, cuts in ranked], "scores_j": scores, "window_gain": gain,
+                "trace": [{"vector": cuts, "forecast_energy_j": energy, "feasible": energy is not None,
+                           "reason": status} for cuts, energy, status in rows],
+                "combinations_evaluated": len(rows), "feasible_combinations": len(ranked)}
+    uavs = np.arange(n)
+    trace, feasible = [], []
+    for cuts in product(SPLIT_POINTS, repeat=n):
+        candidate = np.array(cuts, dtype=int)
+        score = float(scores[uavs, candidate // BLOCKS_PER_GROUP].sum())
+        audit = screen_split(candidate, current, epoch, count, gain, remaining_j, reference, profile, config)
+        trace.append({"vector": cuts, "score_j": score, "feasible": audit["ok"], "reason": audit["reason"]})
+        if audit["ok"]:
+            feasible.append((score, cuts != current_key, cuts))
+    feasible.sort()
+    return {"ok": bool(feasible), "status": "exhaustive_complete" if feasible else "no_reference_feasible_split",
+            "candidates": [np.array(cuts, dtype=int) for _, _, cuts in feasible], "scores_j": scores,
+            "window_gain": gain, "trace": trace, "combinations_evaluated": len(trace),
+            "feasible_combinations": len(feasible)}
+
+
+def rebuild_reference(epoch: int, count: int, current: np.ndarray, window_gain: np.ndarray,
+                      remaining_j: np.ndarray, profile: dict, config: dict) -> dict:
+    """可选工程扩展（文稿默认关闭）：重建固定参考资源后重做 P1。
+
+    用保留当前切分的聚合轮找可行配置，并将电量按参考 horizon 均分作为保守
+    初始化预算。仍须通过完整式(25)筛选及当前真实状态 P2，不保证任务能完成。
+    """
+    first = epoch == 1
+    aggregation_epoch = 2 if first else epoch
+    q = current if aggregation_epoch < config["training"]["epochs"] else None
+    horizon_size = 2 if first else 3
+    problem = make_problem(aggregation_epoch, count, window_gain, current, q, remaining_j / horizon_size, config)
+    initialized = feasible_initialization(problem, profile, config)
+    if not initialized["ok"]:
+        return initialized
+    screen = screen_split(current, current, epoch, count, window_gain, remaining_j,
+                          initialized["resources"], profile, config)
+    return {**initialized, "ok": screen["ok"], "reference_screen": screen}
+
+
+# 7. 联合仿真/训练流程与结果保存 -------------------------------------------------
+def make_output_directory(config: dict, label: str) -> Path:
+    """I/O：按北京时间创建唯一目录，不覆盖已有实验。"""
+    stamp = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d_%H%M%S_%f")
+    output = Path(config["output_root"]) / f"{label}_{stamp}_seed{config['seed']}"
+    output.mkdir(parents=True, exist_ok=False)
+    return output
+
+
+def checkpoint_payload(model: dict) -> dict:
+    """返回 detached CPU 张量字典，供 torch.save；不改变训练状态。"""
+    return {group: {k: v.detach().cpu().clone() for k, v in values.items()} for group, values in model.items()}
+
+
+def run_experiment(config: dict, train: bool = False, data: dict | None = None,
+                   profile: dict | None = None, output: str | Path | None = None) -> dict:
+    """算法1主入口，返回 RunResult，并保存可复核的参数、轨迹、资源及训练结果。
+
+    train=False 只执行物理成本仿真；train=True 在资源通过原约束后执行真实 SGD。
+    服务器并行分支在本地串行模拟，不把本机墙钟时间计作系统模型时间。
+
+    data/profile 可传入准备好的 Data/Profile，否则在本次运行中生成；output
+    是本次运行的新目录，已有 config.json 时拒绝覆盖。函数内部写日志和模型。
+    返回的 summary/history 可用于进一步分析；Model 对象保留在内存返回值中。
+    只有训练且全部轮次完成时 final_model 才非 None；best_model 仅按验证集选取。
+    单轮可行不等于任务必然完成，调用者应先检查 summary['completed']。
+    """
+    import torch
+    config = validate_config(config)
+    torch.set_num_threads(config["training"]["torch_threads"])
+    output = Path(output) if output else make_output_directory(config, "train" if train else "simulate")
+    output.mkdir(parents=True, exist_ok=True)
+    if (output / "config.json").exists():
+        raise FileExistsError(f"实验目录已被使用: {output}")
+    save_json(output / "config.json", config)
+    source = Path(__file__).read_bytes()
+    (output / "uav_sfl_snapshot.py").write_bytes(source)
+    source_sha256 = hashlib.sha256(source).hexdigest()
+    packages = {}
+    for package in ("numpy", "Pillow", "torch", "cvxpy", "clarabel"):
+        try:
+            packages[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            packages[package] = None
+    save_json(output / "runtime.json", {"python": sys.version, "platform": platform.platform(),
+                                      "packages": packages, "code_sha256": source_sha256})
+    start_wall = time.perf_counter()
+    base, provenance = initialize_model(config, require_pretrained=train)
+    data = prepare_data(config) if data is None else data
+    profile = profile_splits(base, config) if profile is None else profile
+    if len(data["clients"]) != config["num_uavs"] or data["image_size"] != config["data"]["image_size"]:
+        raise ValueError("传入 Data 与 Config 的 UAV 数/图像尺寸不一致")
+    profile = grouped_profile(profile)
+    client_cycle_table(profile, config["num_uavs"])
+    save_json(output / "data_manifest.json", data)
+    save_json(output / "split_profiles.json", profile)
+    save_json(output / "initialization.json", provenance)
+    n, epochs = config["num_uavs"], config["training"]["epochs"]
+    strategy = config["optimization"]["strategy"]
+    dynamic = strategy in ("dynamic_opt", "no_window")
+    current = np.full(n, config["optimization"]["fixed_split"], dtype=int)
+    reference = reference_resources(config)
+    remaining = uav_parameter(config, "energy_cap_j").copy()
+    time_s, history, gain_history = data["start_s"], [], []
+    branches = [base for _ in range(n)] if train else None  # 参数只读共享，SGD 返回新字典。
+    global_model, best_model, best_val = base if train else None, None, None
+    best_epoch, last_aggregation = None, 0
+    failure, total_energy, processed = None, 0.0, 0
+    try:
+        for epoch in range(1, epochs + 1):
+            # 第一步：只在轮初冻结 D_k、样本索引和当前链路状态。后续各批次
+            # 共用本轮决策资源；本机求解/训练花费的墙钟时间不改变此物理快照。
+            snapshot = epoch_snapshot(data, time_s, epoch, config)
+            channel = channel_at(time_s, config)
+            selection = None
+            # 第二步：首轮确定当前切分；非最终偶数轮预选“下一周期”的切分。
+            # 预选提前到当前聚合轮开始，是为了在 P2 求解前确定新前缀下发量。
+            # 此时 current 仍用于本轮训练，直到该轮训练与聚合完成后才切换。
+            if dynamic and (epoch == 1 or (epoch % 2 == 0 and epoch < epochs)):
+                selection = select_splits(epoch, snapshot["count"], current, gain_history, channel["gain"], remaining,
+                                          reference, profile, config)
+                if (not selection["ok"] and config["optimization"]["split_objective"] == "reference_score"
+                        and config["optimization"]["reference_recovery"] == "rebuild"):
+                    original_failure = selection
+                    recovery = rebuild_reference(epoch, snapshot["count"], current, selection["window_gain"], remaining, profile, config)
+                    if recovery["ok"]:
+                        reference = recovery["resources"]
+                        selection = select_splits(epoch, snapshot["count"], current, gain_history, channel["gain"], remaining,
+                                                  reference, profile, config)
+                    selection = {**selection, "reference_recovery": recovery, "original_reference_status": original_failure["status"]}
+                if not selection["ok"]:
+                    failure = {"epoch": epoch, "reason": selection["status"], "selection": selection}
+                    break
+            # 非聚合轮和最终轮不下发新前缀，因此传 None；固定切分策略也需在
+            # 中间聚合轮传 current，表示聚合后按同一切点重新下发参数。
+            choosing_current = dynamic and epoch == 1
+            choosing_next = epoch % 2 == 0 and epoch < epochs
+            queue = selection["candidates"] if selection else [current]
+            attempts, solved, problem = [], None, None
+            # 第三步：在真实当前信道下尝试候选并求 P2。参考筛选负责产生队列，
+            # 不能代替实际时限/电池审计；任何候选都不可行时，在更新模型前停止。
+            for cuts in queue:
+                trial_current = cuts if choosing_current else current
+                q = cuts if choosing_next else None
+                problem = make_problem(epoch, snapshot["count"], channel["gain"], trial_current, q, remaining, config)
+                if strategy == "fixed_fixed":
+                    resource = reference_resources(config)
+                    audit = audit_resources(problem, resource, profile, config)
+                    candidate = {"ok": audit["ok"], "status": "fixed_resources" if audit["ok"] else "fixed_resources_infeasible",
+                                 "resources": resource, "metrics": evaluate_resources(problem, resource, profile, config),
+                                 "trace": [], "audit": audit, "wall_s": 0.0}
+                else:
+                    candidate = solve_resources(problem, profile, config, reference,
+                                                retain_feasible=dynamic and config["optimization"]["split_objective"] == "optimized_window")
+                attempts.append({"split": trial_current, "next_split": q, "solve": candidate})
+                if candidate["ok"]:
+                    current = trial_current
+                    solved = candidate
+                    break
+            if solved is None:
+                failure = {"epoch": epoch, "reason": "no_current_feasible_candidate", "attempts": attempts}
+                break
+            metrics, train_metrics, validation = solved["metrics"], None, None
+            training_wall = time.perf_counter()
+            if train:
+                # 第四步：每机从上一轮分支状态执行一次完整本地 epoch。
+                # 新参数先放入 next_branches，所有分支完成后才接替 branches；
+                # 无聚合的奇数轮保留各机独立参数，下一轮继续训练这些参数。
+                next_branches, train_metrics = [], []
+                for uid in range(n):
+                    new_model, stats = train_client_epoch(branches[uid], data, snapshot["indices"][uid], int(current[uid]), epoch, uid, config)
+                    # 真实 Tensor 通信载荷必须与物理模型一致（含标签和尾批）。
+                    if stats["activation_bits"] != metrics["loads"]["activation_bits"][uid] or stats["gradient_bits"] != metrics["loads"]["gradient_bits"][uid]:
+                        raise AssertionError("真实训练通信量与画像不一致")
+                    next_branches.append(new_model)
+                    train_metrics.append(stats)
+                if problem["aggregate"]:
+                    # 聚合完整参数，随后各分支从同一个新全局模型继续。参数只读
+                    # 共享是安全的，因为下一个 sgd_step 会返回新参数而不原地改写。
+                    # 最佳模型只看验证准确率；同分保持先前模型，测试集在末尾使用。
+                    new_global = aggregate_models(next_branches, [snapshot["count"]] * n)
+                    validation = evaluate_model(new_global, data, data["val"], config)
+                    global_model, last_aggregation = new_global, epoch
+                    next_branches = [new_global for _ in range(n)]
+                    if best_val is None or validation["accuracy"] > best_val["accuracy"]:
+                        best_model, best_val, best_epoch = new_global, validation, epoch
+                branches = next_branches
+            row = {"epoch": epoch, "start_s": time_s, "end_s": time_s + metrics["duration_s"],
+                   "count_per_uav": snapshot["count"], "indices": snapshot["indices"], "split": current.copy(),
+                   "next_split": problem["next_split"], "aggregate": problem["aggregate"], "channel": channel,
+                   "resources": solved["resources"], "metrics": metrics,
+                   "remaining_before_j": remaining.copy(), "remaining_after_j": remaining - metrics["uav_energy_j"],
+                   "solver_status": solved["status"], "solver_wall_s": solved["wall_s"],
+                   "training_wall_s": time.perf_counter() - training_wall if train else 0.0,
+                   "train": train_metrics, "validation": validation}
+            with (output / "decisions.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({**row, "selection": selection, "attempts": attempts}, default=json_value, ensure_ascii=False, allow_nan=False) + "\n")
+            history.append(row)
+            if problem["aggregate"]:
+                last_aggregation = epoch
+            # 第五步：该轮成功后按模型时延推进物理时间、扣除 UAV 训练电量，
+            # 再把本轮信道加入“已完成”窗口。新增样本直到下次 snapshot 才参与。
+            # 保留最近一次实际可行资源作下次参考，且在聚合后才应用 next_split。
+            remaining = row["remaining_after_j"].copy()
+            time_s = row["end_s"]
+            total_energy += metrics["total_energy_j"]
+            processed += n * snapshot["count"]
+            gain_history.append(channel["gain"].copy())
+            reference = copy.deepcopy(solved["resources"])
+            if problem["next_split"] is not None:
+                current = problem["next_split"].copy()
+            print(f"epoch {epoch}/{epochs} D={snapshot['count']} split={row['split'].tolist()} "
+                  f"T={metrics['duration_s']:.3f}s E={metrics['total_energy_j']:.3f}J {solved['status']}", flush=True)
+    except (ValueError, RuntimeError, FloatingPointError, AssertionError) as exc:
+        failure = {"epoch": len(history) + 1, "reason": "execution_error", "type": type(exc).__name__, "message": str(exc)}
+    completed = len(history) == epochs and failure is None
+    summary = {"status": "completed" if completed else "incomplete", "completed": completed,
+               "mode": "training" if train else "cost_simulation", "dataset_kind": data["kind"],
+               "strategy": strategy, "epochs_completed": len(history), "epochs_planned": epochs,
+               "aggregations_completed": sum(int(row["aggregate"]) for row in history),
+               "reference_recovery": config["optimization"]["reference_recovery"],
+               "budget": training_budget(config), "start_s": data["start_s"], "finish_s": time_s,
+               "training_duration_s": time_s - data["start_s"], "variable_energy_j": total_energy,
+               "system_energy_j": config["task"]["fixed_energy_j"] + total_energy,
+               "uav_energy_j": sum((r["metrics"]["uav_energy_j"] for r in history), np.zeros(n)),
+               "server_energy_j": sum(r["metrics"]["server_energy_j"] for r in history),
+               "remaining_j": remaining, "processed_samples": processed,
+               "distinct_training_samples": n * history[-1]["count_per_uav"] if history else 0,
+               "best_validation_epoch": best_epoch, "best_validation": best_val,
+               "last_aggregation_epoch": last_aggregation, "initialization": provenance,
+               "data_fingerprint": data["fingerprint"], "hardware_profile_measured": profile["metadata"]["hardware_measured"],
+               "failure": failure, "wall_s": time.perf_counter() - start_wall,
+               "code_sha256": source_sha256,
+               "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。"}
+    if train and last_aggregation:
+        # 这里已离开训练循环，测试集从未参与选模。未完成时的“最近聚合模型”
+        # 仍可供诊断，但不会被标记为完成任务的 final_model。
+        summary["last_aggregated_test"] = evaluate_model(global_model, data, data["test"], config)
+        summary["best_validation_model_test"] = evaluate_model(best_model, data, data["test"], config)
+        if config["training"]["save_checkpoint"]:
+            torch.save(checkpoint_payload(global_model), output / "last_aggregated_model.pt")
+            torch.save(checkpoint_payload(best_model), output / "best_validation_model.pt")
+    if train and not completed and history and config["training"]["save_checkpoint"]:
+        torch.save({"branches": [checkpoint_payload(m) for m in branches], "epoch": len(history)}, output / "partial_branches.pt")
+    summary["wall_s"] = time.perf_counter() - start_wall
+    save_json(output / "summary.json", summary)
+    fields = ["epoch", "start_s", "end_s", "count_per_uav", "duration_s", "energy_j", "server_j", "uav_j", "split", "next_split", "solver_status", "val_accuracy"]
+    with (output / "history.csv").open("w", newline="", encoding="utf-8-sig") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer.writeheader()
+        for row in history:
+            writer.writerow({"epoch": row["epoch"], "start_s": row["start_s"], "end_s": row["end_s"],
+                             "count_per_uav": row["count_per_uav"], "duration_s": row["metrics"]["duration_s"],
+                             "energy_j": row["metrics"]["total_energy_j"], "server_j": row["metrics"]["server_energy_j"],
+                             "uav_j": json.dumps(row["metrics"]["uav_energy_j"].tolist()), "split": json.dumps(row["split"].tolist()),
+                             "next_split": json.dumps(json_value(row["next_split"]) if row["next_split"] is not None else None),
+                             "solver_status": row["solver_status"], "val_accuracy": row["validation"]["accuracy"] if row["validation"] else ""})
+    return {"summary": summary, "history": history, "final_model": global_model if completed else None,
+            "best_model": best_model, "branches": branches, "output_dir": str(output)}
+
+
+# 8. 有意义的协议验证：五切点梯度、尾批、聚合通信、可行性与能量下降 ---------------
+def verify_implementation(config: dict) -> dict:
+    """小型 CPU 验证；返回检查结果，失败抛 AssertionError。不作为实验准确率。"""
+    import torch
+    from torch.nn import functional as F
+    c = load_config(updates={"num_uavs": 2, "data": {"kind": "synthetic", "image_size": 32,
+                            "synthetic_per_uav": 5, "synthetic_eval_size": 3, "initial_fraction": 0.6},
+                            "training": {"epochs": 4, "batch_size": 2, "allow_random_init": True, "save_checkpoint": False},
+                            "uav": {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
+                                    "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
+                            "optimization": {"max_iterations": 15, "split_objective": "reference_score"},
+                            "output_root": config["output_root"]})
+    torch.set_num_threads(c["training"]["torch_threads"])
+    model, _ = initialize_model(c)
+    data = prepare_data(c)
+    x, y = load_batch(data, data["clients"][0][:2], "cpu")
+    names = list(model["params"])
+    logits = forward_suffix(model, forward_prefix(model, x, 0), 0)
+    grads = dict(zip(names, torch.autograd.grad(F.cross_entropy(logits, y), list(model["params"].values()))))
+    errors = []
+    for split in SPLIT_POINTS:
+        split_grads, _ = split_gradients(model, x, y, split)
+        errors.append(max(float((grads[name] - split_grads[name]).abs().max()) for name in names))
+        for name in names:
+            torch.testing.assert_close(grads[name], split_grads[name], rtol=2e-5, atol=2e-6)
+        stepped = sgd_step(model, split_grads, 0.01)
+        for name in names:
+            torch.testing.assert_close(stepped["params"][name], model["params"][name] - 0.01 * grads[name], rtol=2e-5, atol=2e-6)
+    original = {name: value.detach().clone() for name, value in model["params"].items()}
+    updated, stats = train_client_epoch(model, data, data["clients"][0][:3], 4, 1, 0, c)
+    assert math.isclose(stats["step_sum"], c["training"]["epoch_step_size"], rel_tol=1e-12)
+    assert any(not torch.equal(updated["params"][name], model["params"][name]) for name in names)
+    assert all(torch.equal(original[name], model["params"][name]) for name in names)
+    average = aggregate_models([model, updated], [1, 3])
+    for name in names:
+        torch.testing.assert_close(average["params"][name], model["params"][name] * 0.25 + updated["params"][name] * 0.75)
+    snap = epoch_snapshot(data, data["start_s"], 1, c)
+    assert snap["count"] == 3
+    later = epoch_snapshot(data, data["release_s"][3], 2, c)
+    assert later["count"] == 4 and snap["count"] == 3
+    # 检查首次采样、采样间隙、末批截断，以及长任务的自动间隔。
+    patrol_config = default_config()
+    release, plan = sample_release_schedule(5552, patrol_config)
+    initial = plan["initial_count"]
+    assert np.count_nonzero(release == 0) == initial
+    np.testing.assert_allclose(np.diff(release[initial - 1:]), plan["sample_interval_s"])
+    assert math.isclose(release[-1], plan["target_s"])
+    manual = merge_config(patrol_config, {"data": {"sample_interval_s": 5, "samples_per_capture": 2}})
+    manual_release, _ = sample_release_schedule(6, manual)
+    np.testing.assert_array_equal(manual_release, [0, 5, 5, 10, 10, 15])
+    np.testing.assert_array_equal(np.searchsorted(manual_release, [4.9, 5, 9.9, 10, 20], side="right"),
+                                  [1, 3, 3, 5, 6])
+    assert np.searchsorted(release, 9 * 600, side="right") < 0.2 * len(release)
+    legacy_release, _ = sample_release_schedule(5, merge_config(c, {"data": {"rate_per_s": 1.0}}))
+    np.testing.assert_array_equal(legacy_release, [1, 2, 3, 4, 5])
+    groups = [set(ids) for ids in data["clients"]] + [set(data["val"]), set(data["test"])]
+    assert all(not a & b for i, a in enumerate(groups) for b in groups[i + 1:])
+    profile = profile_splits(model, c)
+    remaining = np.full(2, c["uav"]["energy_cap_j"])
+    h = channel_at(data["start_s"], c)["gain"]
+    reference = reference_resources(c)
+    heterogeneous = load_config(updates={"num_uavs": 2,
+        "uav": {"kappa": [1e-28, 1.4e-28], "compute_power_max_w": [0.1, 0.3375],
+                "power_max_w": [0.3, 0.8], "cycles_per_flop": [1.0, 0.5], "energy_cap_j": [30.0, 40.0]}})
+    hetero_profile = {**profile, "client_cycles": np.array([[2.0], [1.0]]) * profile["client_cycles"]}
+    # 每机画像行与自身硬件对应；共享旧画像仍可直接读取。
+    legacy = {key: np.arange(1.0, 10.0) for key in
+              ("client_cycles", "server_cycles", "activation_bits", "gradient_bits", "prefix_bits")}
+    np.testing.assert_array_equal(grouped_profile(legacy)["client_cycles"], [1, 3, 5, 7, 9])
+    legacy["client_cycles"] = np.vstack([np.arange(1.0, 10.0), np.arange(1.0, 10.0) * 2])
+    np.testing.assert_array_equal(grouped_profile(legacy)["client_cycles"], [[1, 3, 5, 7, 9], [2, 6, 10, 14, 18]])
+    hetero_problem = make_problem(1, 3, h, np.array([4, 6]), None, np.array([30.0, 40.0]), heterogeneous)
+    hetero_resource = reference_resources(heterogeneous)
+    metrics = evaluate_resources(hetero_problem, hetero_resource, hetero_profile, heterogeneous)
+    np.testing.assert_allclose(metrics["loads"]["client_cycles"],
+                               3 * profile["client_cycles"][[2, 3]] * [2, 1])
+    for key, bounds in (("frequency_hz", maximum_frequency(heterogeneous)),
+                        ("power_w", uav_parameter(heterogeneous, "power_max_w"))):
+        invalid = {k: v.copy() for k, v in hetero_resource.items()}
+        invalid[key][0] = bounds[0] * 1.05
+        audit = audit_resources(hetero_problem, invalid, hetero_profile, heterogeneous)
+        assert not audit["ok"] and math.isclose(audit["normalized_violation"], 0.05)
+    phase = convex_subproblem(hetero_problem, hetero_profile, heterogeneous, fixed_power=0.3)
+    assert phase["ok"] and audit_resources(hetero_problem, phase["resources"], hetero_profile, heterogeneous)["ok"]
+    assert reference_scores(3, h, hetero_resource, hetero_profile, True, heterogeneous).shape == (2, 5)
+    results = []
+    for epoch, next_split in ((1, None), (2, np.array([8, 2])), (4, None)):
+        problem = make_problem(epoch, 3, h, np.array([0, 4]), next_split, remaining, c)
+        m = evaluate_resources(problem, reference, profile, c)
+        mu = profile["prefix_bits"][problem["split"] // BLOCKS_PER_GROUP] / m["up_rate_bps"] if problem["aggregate"] else np.zeros(2)
+        md = profile["prefix_bits"][next_split // BLOCKS_PER_GROUP] / m["down_rate_bps"] if next_split is not None else np.zeros(2)
+        aggregate_time = c["server"]["aggregation_time_s"] if problem["aggregate"] else 0.0
+        correct_duration = float(np.max(m["branch_training_s"]) + np.max(mu) + np.max(md) + aggregate_time)
+        assert math.isclose(m["duration_s"], correct_duration, rel_tol=1e-12)
+        if next_split is not None:
+            wrong_combined_max = float(np.max(m["branch_training_s"] + mu + md) + aggregate_time)
+            assert correct_duration > wrong_combined_max + 1e-3
+        assert (m["loads"]["download_bits"].sum() == 0) == (next_split is None)
+        if next_split is not None:
+            np.testing.assert_array_equal(m["loads"]["download_bits"], profile["prefix_bits"][next_split // BLOCKS_PER_GROUP])
+        solution = solve_resources(problem, profile, c, reference)
+        assert solution["ok"], solution
+        assert audit_resources(problem, solution["resources"], profile, c)["ok"]
+        accepted = [r["energy_j"] for r in solution["trace"] if r.get("accepted", True)]
+        assert all(new <= old for old, new in zip(accepted, accepted[1:]))
+        results.append({"epoch": epoch, "status": solution["status"], "energy_j": solution["metrics"]["total_energy_j"]})
+    # 低电池与不可能期限必须拒绝，不能静默返回参考资源。
+    problem = make_problem(1, 3, h, np.array([0, 4]), None, np.zeros(2), c)
+    assert not audit_resources(problem, reference, profile, c)["ok"]
+    impossible = merge_config(c, {"task": {"epoch_deadline_s": 1e-6}})
+    rejected = solve_resources(problem, profile, impossible)
+    assert not rejected["ok"]
+    # 仅收紧电量，让初始参考资源失效，验证电池约束确实进入凸求解。
+    p = make_problem(1, 3, h, np.array([0, 4]), None, remaining, c)
+    reference_energy = evaluate_resources(p, reference, profile, c)["uav_energy_j"]
+    tight = make_problem(1, 3, h, np.array([0, 4]), None, reference_energy * 0.6, c)
+    assert not audit_resources(tight, reference, profile, c)["ok"]
+    tight_solution = solve_resources(tight, profile, c)
+    assert tight_solution["ok"], tight_solution
+    assert audit_resources(tight, tight_solution["resources"], profile, c)["ok"]
+    # 使用一个过慢的固定参考，严格 P1 应拒绝，显式重建可恢复参考可行性。
+    slow = reference_resources(c)
+    slow["frequency_hz"][:] = 1000.0
+    selection = select_splits(2, 3, np.array([0, 4]), [h], h, remaining, slow, profile, c)
+    assert not selection["ok"] and selection["status"] == "no_reference_feasible_split"
+    rebuilt = rebuild_reference(2, 3, np.array([0, 4]), h, remaining, profile, c)
+    assert rebuilt["ok"]
+    selection = select_splits(2, 3, np.array([0, 4]), [h], h, remaining, rebuilt["resources"], profile, c)
+    assert selection["ok"]
+    assert selection["combinations_evaluated"] == len(SPLIT_POINTS) ** c["num_uavs"]
+    assert {tuple(row["vector"]) for row in selection["trace"]} == set(product(SPLIT_POINTS, repeat=c["num_uavs"]))
+    ranked = [tuple(v) for v in selection["candidates"]]
+    feasible_rows = [row for row in selection["trace"] if row["feasible"]]
+    assert selection["scores_j"].shape == (c["num_uavs"], len(SPLIT_POINTS))
+    expected = sorted(feasible_rows, key=lambda row: (row["score_j"], row["vector"] != (0, 4), row["vector"]))
+    assert ranked == [row["vector"] for row in expected]
+    assert training_budget(default_config())["conditional_epochs"] == 100
+    # 相同原始轨迹时刻必须产生完全相同的信道，不依赖调用顺序。
+    np.testing.assert_array_equal(channel_at(20, c)["gain"], channel_at(20, c)["gain"])
+    return {"passed": True, "split_gradient_max_abs_errors": errors,
+            "checks": ["five_split_gradients_and_updates", "exhaustive_split_ranking", "input_immutability", "tail_batch_step_sum",
+                       "weighted_aggregation", "frozen_epoch_snapshot", "periodic_capture_release", "legacy_rate_release", "disjoint_partitions",
+                       "separate_stage_maxima", "new_prefix_payload", "final_zero_download",
+                       "convex_original_feasibility", "accepted_energy_monotonicity", "infeasible_rejection",
+                       "binding_battery_constraint", "strict_reference_failure_and_explicit_rebuild", "budget_rounding",
+                       "per_uav_cycles_and_limits", "per_uav_phase_one", "legacy_and_grouped_profiles"],
+            "solver_cases": results}
+
+
+def main() -> int:
+    """命令行适配层；成功返回 0，协议验证/运行错误返回 1，任务未完成返回 2。
+
+    参数优先级：default_config() < --config JSON < CLI 显式覆盖。
+    smoke 再覆盖其诊断规模、随机初始化和保存选项；check 使用固定小规模测试。
+    prepare/profile 写准备结果，simulate/train 调同一主流程并以 train 标志
+    决定是否更新神经网络。--output 指定结果目录，--checkpoint 指向已有权重。
+    """
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("command", choices=["config", "prepare", "profile", "simulate", "train", "check", "smoke"])
+    parser.add_argument("--config", help="JSON 局部参数覆盖文件")
+    parser.add_argument("--output", help="本次运行的新目录；不得覆盖已有 config.json")
+    parser.add_argument("--checkpoint", help="ResNet18 本地预训练参数路径")
+    parser.add_argument("--allow-random-init", action="store_true", help="显式允许随机初始化，仅用于诊断/指定的消融")
+    args = parser.parse_args()
+    updates = {}
+    if args.checkpoint or args.allow_random_init:
+        updates["training"] = {}
+        if args.checkpoint:
+            updates["training"]["checkpoint"] = str(Path(args.checkpoint).resolve())
+        if args.allow_random_init:
+            updates["training"]["allow_random_init"] = True
+    config = load_config(args.config, updates)
+    if args.command == "config":
+        print(json.dumps({"config": config, "training_budget": training_budget(config)}, ensure_ascii=False, indent=2))
+        return 0
+    if args.command in ("simulate", "train", "smoke"):
+        if args.command == "smoke":
+            config = validate_config(merge_config(config, {"num_uavs": 4,
+                "data": {"kind": "synthetic", "image_size": 32, "synthetic_per_uav": 4,
+                         "synthetic_eval_size": 3, "samples_per_uav": None, "initial_fraction": 0.5,
+                         "fixed_epoch_counts": None},
+                "training": {"epochs": 4, "batch_size": 2, "epoch_step_size": 0.001,
+                             "checkpoint": None, "allow_random_init": True, "save_checkpoint": False},
+                "uav": {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
+                        "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
+                "budget": {"mode": "empirical"},
+                "optimization": {"max_iterations": 15, "split_objective": "reference_score"}}))
+        result = run_experiment(config, train=args.command != "simulate", output=args.output)
+        report = {key: result["summary"][key] for key in ("status", "mode", "dataset_kind", "epochs_completed", "epochs_planned", "system_energy_j", "processed_samples")}
+        report["failure_reason"] = result["summary"]["failure"]["reason"] if result["summary"]["failure"] else None
+        print(json.dumps({"output_dir": str(Path(result["output_dir"]).resolve()), "summary": report}, default=json_value, ensure_ascii=False, indent=2))
+        return 0 if result["summary"]["completed"] else 2
+    output = Path(args.output) if args.output else make_output_directory(config, args.command)
+    output.mkdir(parents=True, exist_ok=True)
+    if args.command == "check":
+        report = verify_implementation(config)
+        save_json(output / "verification.json", report)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    elif args.command == "prepare":
+        data = prepare_data(config)
+        save_json(output / "data_manifest.json", data)
+        save_json(output / "config.json", config)
+        print(json.dumps({"output": str(output), "capacity_per_uav": data["capacity"], "audit": data["audit"],
+                          "class_counts": data["class_counts"], "val": len(data["val"]), "test": len(data["test"])}, default=json_value, ensure_ascii=False, indent=2))
+    else:
+        import torch
+        torch.set_num_threads(config["training"]["torch_threads"])
+        model, _ = initialize_model(config)
+        save_json(output / "split_profiles.json", profile_splits(model, config))
+        print(f"模型画像已保存到 {output}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (ValueError, RuntimeError, FileNotFoundError, AssertionError) as error:
+        print(f"ERROR: {type(error).__name__}: {error}", flush=True)
+        raise SystemExit(1)

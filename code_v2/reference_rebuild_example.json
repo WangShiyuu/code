@@ -1,4 +1,4 @@
 {
   "training": {"epochs": 4},
-  "optimization": {"reference_recovery": "rebuild"}
+  "optimization": {"reference_recovery": "rebuild", "split_objective": "reference_score"}
 }

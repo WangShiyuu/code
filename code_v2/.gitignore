@@ -1,4 +1,11 @@
 __pycache__/
 *.pyc
 .venv/
-output/
+output/*
+!output/README.md
+!output/verification_release_*/
+!output/heterogeneous_verified_20261109_170256/
+!output/periodic_0_20261109_153350042/
+!output/patrol_120_20261109_152433258/
+!output/bandwidth_10mhz_20261109_162600/
+!output/patrol_geometry/

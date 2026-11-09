@@ -1,0 +1,2 @@
+# Preserve the exact bytes used for archived simulation source hashes.
+output/**/uav_sfl_snapshot.py binary
