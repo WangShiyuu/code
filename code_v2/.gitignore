@@ -10,3 +10,4 @@ output/*
 !output/patrol_120_20261109_152433258/
 !output/bandwidth_10mhz_20261109_162600/
 !output/patrol_geometry/
+!output/train120_*/

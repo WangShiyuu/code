@@ -1,0 +1,12 @@
+{
+  "mode": "train",
+  "status": "running",
+  "started_at": "2026-11-17T09:54:28.662990+08:00",
+  "finished_at": null,
+  "output_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\output\\train120_cbcl_20261117_095427",
+  "code_version": {
+    "git_commit": "4431b838b970249464ff6debd1617507f95e8c9d",
+    "git_dirty": false,
+    "source_sha256": "3ec29d4a854960e7e1cc3ed909ec82f48ec40c4388d0f378f8a9dc93f1819c5f"
+  }
+}

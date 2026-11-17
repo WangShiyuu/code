@@ -1,0 +1,16 @@
+{
+  "mode": "train",
+  "status": "completed",
+  "started_at": "2026-11-16T14:04:24.978590+08:00",
+  "finished_at": "2026-11-16T22:15:47.011514+08:00",
+  "output_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\output\\train120_20261116_140424",
+  "code_version": {
+    "git_commit": "07d965521cdac436dd777d4a1cdd9589a5598896",
+    "git_dirty": false,
+    "source_sha256": "3ec29d4a854960e7e1cc3ed909ec82f48ec40c4388d0f378f8a9dc93f1819c5f"
+  },
+  "epochs_completed": 120,
+  "epochs_planned": 120,
+  "failure": null,
+  "wall_s": 29482.032512800004
+}
