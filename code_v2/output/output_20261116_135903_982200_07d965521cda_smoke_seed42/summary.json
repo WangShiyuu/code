@@ -1,0 +1,377 @@
+{
+  "status": "completed",
+  "completed": true,
+  "mode": "training",
+  "dataset_kind": "synthetic",
+  "strategy": "dynamic_opt",
+  "epochs_completed": 4,
+  "epochs_planned": 4,
+  "aggregations_completed": 2,
+  "reference_recovery": "rebuild",
+  "budget": {
+    "epochs": 4,
+    "aggregations": 2,
+    "conditional_epochs": 100,
+    "mode": "empirical",
+    "effective_bound_verified": false
+  },
+  "start_s": 0.0,
+  "finish_s": 11.670159682100593,
+  "training_duration_s": 11.670159682100593,
+  "variable_energy_j": 0.5569535456009217,
+  "system_energy_j": 0.5569535456009217,
+  "uav_energy_j": [
+    4.715188747925292e-05,
+    8.225865442321908e-05,
+    0.00013063046661495795,
+    0.00019342213391608206
+  ],
+  "server_energy_j": 0.5565000824584881,
+  "remaining_j": [
+    199999.9999528481,
+    199999.99991774137,
+    199999.99986936952,
+    199999.9998065779
+  ],
+  "processed_samples": 32,
+  "distinct_training_samples": 8,
+  "best_validation_epoch": 2,
+  "best_validation": {
+    "loss": 2.210331360499064,
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "confusion": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "samples": 3
+  },
+  "last_aggregation_epoch": 4,
+  "initialization": {
+    "kind": "random_diagnostic",
+    "seed": 42,
+    "head_reinitialized": true
+  },
+  "data_fingerprint": "a23c35606264b21c67a99631e70b5e39534402c2d4adf7a6a14834aa0c103dde",
+  "hardware_profile_measured": false,
+  "failure": null,
+  "wall_s": 7.802990899999713,
+  "code_sha256": "3ec29d4a854960e7e1cc3ed909ec82f48ec40c4388d0f378f8a9dc93f1819c5f",
+  "code_version": {
+    "git_commit": "07d965521cdac436dd777d4a1cdd9589a5598896",
+    "git_dirty": false,
+    "source_sha256": "3ec29d4a854960e7e1cc3ed909ec82f48ec40c4388d0f378f8a9dc93f1819c5f"
+  },
+  "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。",
+  "last_aggregated_test": {
+    "loss": 2.073888063430786,
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "confusion": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "samples": 3
+  },
+  "best_validation_model_test": {
+    "loss": 2.1557803948720298,
+    "accuracy": 0.0,
+    "macro_f1": 0.0,
+    "confusion": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "samples": 3
+  }
+}

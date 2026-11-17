@@ -1,0 +1,73 @@
+{
+  "client_flops": [
+    9633792.0,
+    66256896.0,
+    116588544.0,
+    166920192.0,
+    217251840.0
+  ],
+  "server_flops": [
+    207645696.0,
+    151022592.0,
+    100690944.0,
+    50359296.0,
+    27648.0
+  ],
+  "server_cycles": [
+    6229370.88,
+    4530677.76,
+    3020728.32,
+    1510778.88,
+    829.4399999999999
+  ],
+  "activation_bits": [
+    131136.0,
+    131136.0,
+    65600.0,
+    32832.0,
+    16448.0
+  ],
+  "gradient_bits": [
+    131072.0,
+    131072.0,
+    65536.0,
+    32768.0,
+    16384.0
+  ],
+  "prefix_bits": [
+    305152.0,
+    5040128.0,
+    21858304.0,
+    89049088.0,
+    357648384.0
+  ],
+  "client_cycles": [
+    4816896.0,
+    33128448.0,
+    58294272.0,
+    83460096.0,
+    108625920.0
+  ],
+  "metadata": {
+    "split_points": [
+      0,
+      2,
+      4,
+      6,
+      8
+    ],
+    "uav_cycles_per_flop": [
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "method": "supported_operator_FLOPs_times_configured_cycles_per_FLOP",
+    "hardware_measured": false,
+    "image_size": 32,
+    "dtype": "float32",
+    "labels": "int64",
+    "prefix_payload": "trainable_parameters_only_frozen_BN_predeployed",
+    "exclusions": "unsupported operators, optimizer updates, memory/I/O/runtime overhead"
+  }
+}

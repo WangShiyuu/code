@@ -1,0 +1,13 @@
+{
+  "mode": "check",
+  "status": "completed",
+  "started_at": "2026-11-16T14:00:36.862386+08:00",
+  "finished_at": "2026-11-16T14:00:43.627985+08:00",
+  "output_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\output\\output_20261116_140036_862101_07d965521cda_check_seed42",
+  "code_version": {
+    "git_commit": "07d965521cdac436dd777d4a1cdd9589a5598896",
+    "git_dirty": false,
+    "source_sha256": "3ec29d4a854960e7e1cc3ed909ec82f48ec40c4388d0f378f8a9dc93f1819c5f"
+  },
+  "wall_s": 6.765301199999158
+}
