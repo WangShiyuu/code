@@ -2,6 +2,21 @@
 
 配置、优化和训练各有独立的 Python 接口。优化与训练都从配置模块读取参数，也可以由 `main.py` 串成完整实验。
 
+当前默认仍为 **动态切分＋资源优化**（`dynamic_opt + optimized_window`），每机
+在物理时刻0从500个样本开始，由 `data.initial_samples_per_uav=500` 控制。
+其值为 `null` 时才使用 `initial_fraction`；容量不足时明确报错。
+`smoke` 与 `check` 的小规模合成数据显式使用比例模式。
+
+默认轨迹为 `trajectory.kind="serpentine_equal"`：1000×1000米区域四等分，四机
+采用同一闭合蛇形模板旋转得到的四条路线。每子区6条扫描线、间距84米，高度100米，
+圆角半径10米，直线最高10米/秒、转弯5米/秒，起始进度依次错开1/4圈。
+每圈约3668.496米、400.699秒。轨迹与飞行速度是场景输入，资源求解不改变路线。
+信道仍按轮初位置冻结；样本定时释放不等于按实际成像位置采集。
+
+加载不含新字段的旧圆轨迹JSON时保留旧轨迹和显式比例初值，方便重现历史结果。
+要把旧配置切换到新场景，显式设置 `trajectory.kind="serpentine_equal"` 和
+`data.initial_samples_per_uav=500`。新蛇形场景采用4架UAV；非4机旧诊断仍可用圆轨迹。
+
 | 文件 | 负责的工作 | 常用函数 |
 |---|---|---|
 | `config.py` | 默认参数、JSON 覆盖、参数校验、训练预算及共享的切点定义 | `default_config`、`load_config`、`training_budget` |
@@ -22,7 +37,7 @@ $sflPython = 'E:\Work1SFL\artifacts\archive_verification_env\Scripts\python.exe'
 & $sflPython -X utf8 -B main.py smoke
 ```
 
-`config` 打印生效参数。`check` 执行 21 项协议检查。`smoke` 使用合成数据完成四机四轮训练及两次模型聚合。各命令可单独执行。`-B` 使 Python 跳过字节码缓存写入。
+`config` 打印生效参数。`check` 保留原21项协议检查，并检查新增的等周期轨迹和500样本释放规则。`smoke` 使用合成数据完成四机四轮训练及两次模型聚合。各命令可单独执行。`-B` 使 Python 跳过字节码缓存写入。
 
 | 命令 | 用途 |
 |---|---|

@@ -19,6 +19,7 @@ from .config import (
     SPLIT_POINTS,
     STD,
     json_value,
+    require_positive,
     uav_parameter,
     validate_split_point,
 )
@@ -112,10 +113,31 @@ def partition_clients(indices: list[int], records: list[dict], config: dict) -> 
     return [rng.permutation(ids).tolist() for ids in clients], unused
 
 
-def sample_release_schedule(capacity: int, config: dict) -> tuple[np.ndarray, dict]:
-    """返回每机共同可用的第 j 个样本的物理时刻，以及可复算的巡逻计划。"""
+def initial_sample_count(capacity: int, config: dict) -> int:
+    """确定首轮每机样本数：显式固定数优先，None 回退比例；不截断超容量请求。"""
+    require_positive(capacity, "capacity", True)
     d = config["data"]
-    initial = max(1, math.floor(capacity * d["initial_fraction"]))
+    requested = d.get("initial_samples_per_uav")
+    if requested is not None:
+        require_positive(requested, "initial_samples_per_uav", True)
+        if requested > capacity:
+            raise ValueError(f"initial_samples_per_uav={requested} 超过每机真实样本容量 {capacity}")
+        return requested
+    fraction = d["initial_fraction"]
+    require_positive(fraction, "initial_fraction")
+    if fraction > 1:
+        raise ValueError("initial_fraction 必须属于 (0,1]")
+    return max(1, math.floor(capacity * fraction))
+
+
+def sample_release_schedule(capacity: int, config: dict) -> tuple[np.ndarray, dict]:
+    """返回每机共同释放表；默认时刻 0 已有固定初始数，其余按原巡逻计划采集。
+
+    rate_per_s 显式使用旧恒速语义：全部样本从 1/rate 开始逐个到达，
+    初始数只决定首轮等待到第几个样本，不把这些样本提前移至时刻 0。
+    """
+    d = config["data"]
+    initial = initial_sample_count(capacity, config)
     if d["rate_per_s"] is not None:
         release = np.arange(1, capacity + 1, dtype=float) / d["rate_per_s"]
         return release, {"mode": "constant_rate", "initial_count": initial, "rate_per_s": d["rate_per_s"]}

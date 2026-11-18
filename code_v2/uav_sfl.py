@@ -27,6 +27,7 @@ r"""动态 UAV-SFL：参数、环境、式(25)—(31)优化、函数式 ResNet18
     & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
 后续将 $sflPython 设置为 (Resolve-Path '.\.venv\Scripts\python.exe').Path。
 
+默认四机等周期闭合蛇形轨迹，每机在物理时刻0已有500个样本。
 默认 strategy='dynamic_opt'、split_objective='optimized_window'。巡逻采样按固定秒数入库；
 每个切分组合按相同的预测窗口分别求资源，比较通过原约束复核的累计能耗。
 reference_recovery='rebuild' 用于可选 reference_score 策略的参考资源恢复。
@@ -68,7 +69,7 @@ import csv
 from contextlib import contextmanager
 import hashlib
 from itertools import product
-from functools import partial
+from functools import lru_cache, partial
 import io
 import importlib.metadata
 import json
@@ -113,7 +114,9 @@ def default_config(num_uavs: int = 4) -> dict:
         # root 放原始 Images.zip/Annotations.zip；区域图像在读取 batch 时裁剪。
         # val/test_fraction 按原始街景划分，避免同场景区域跨集合泄漏。
         # samples_per_uav=None 自动按训练池等量分配；整数则指定每机容量。
-        # 首轮使用既往巡逻样本，之后每经过一个采样间隔就入库一批新区域。
+        # 首轮默认每机已有 500 个巡逻样本；initial_samples_per_uav=None 才回退
+        # 到 initial_fraction。固定初始数超过真实容量时明确报错，不静默截断。
+        # 此后每经过一个采样间隔就入库一批新区域。
         # sample_interval_s=None 时按规划时段和剩余批数标定固定间隔。
         # patrol_epoch_s 是任务规划用的名义轮长，独立于资源求解的硬时限。
         # 显式设置 rate_per_s 可复现旧的恒速释放及启动等待。
@@ -121,7 +124,8 @@ def default_config(num_uavs: int = 4) -> dict:
         # fixed_epoch_counts=None 按物理时间释放；给列表则改为共同快照消融。
         "data": {"kind": "cbcl", "root": str(ROOT.parents[1] / "DataSet" / "CBCL StreetScenes"),
                  "image_size": 64, "val_fraction": 0.1, "test_fraction": 0.1,
-                 "samples_per_uav": None, "initial_fraction": 0.1, "rate_per_s": None,
+                 "samples_per_uav": None, "initial_samples_per_uav": 500,
+                 "initial_fraction": 0.1, "rate_per_s": None,
                  "patrol_epoch_s": 600.0, "patrol_collection_fraction": 0.95,
                  "sample_interval_s": None, "samples_per_capture": 1,
                  "synthetic_per_uav": 20, "synthetic_eval_size": 12,
@@ -138,9 +142,18 @@ def default_config(num_uavs: int = 4) -> dict:
         # epsilon 的含义是梯度范数平方目标上界，不能解释为分类错误率。
         "budget": {"mode": "empirical", "A_bar": 3.85, "C_bar": 0.0115,
                    "epsilon": 0.05, "effective_bound_verified": False},
-        # 轨迹坐标/半径单位 m，速度 m/s。偏心圆使 UAV 与服务器距离随时间变化。
+        # 默认四机在同一个正方形区域的四个旋转子区执行等长闭环蛇形扫描；
+        # 每个直角以固定半径圆角连接，转弯速度较低，直段按切向加速度升降速。
+        # 相位按周期时间比例指定；坐标/半径单位 m，速度 m/s，加速度 m/s²。
+        # circle 保留原偏心圆，旧 JSON 未指定 kind 时按旧圆字段迁移。
         # 轨迹是外部给定条件，连续资源优化不会改变飞行路线或速度。
-        "trajectory": {"server_xyz_m": [0.0, 0.0, 0.0], "altitude_m": 100.0,
+        "trajectory": {"kind": "serpentine_equal",
+                       "region_size_m": 1000.0, "center_xy_m": [0.0, 0.0],
+                       "scan_rows": 6, "edge_margin_m": 10.0, "cross_margin_m": 40.0,
+                       "turn_radius_m": 10.0, "turn_speed_m_s": 5.0,
+                       "tangential_acceleration_m_s2": 2.0,
+                       "phase_offsets_fraction": [0.0, 0.25, 0.5, 0.75],
+                       "server_xyz_m": [0.0, 0.0, 0.0], "altitude_m": 100.0,
                        "radius_min_m": 250.0, "radius_max_m": 450.0,
                        "center_offset_m": 150.0, "speed_m_s": 10.0},
         # beta_l/beta_n 是线性参考功率增益，alpha_l/alpha_n 是路径损耗指数。
@@ -184,6 +197,8 @@ def default_config(num_uavs: int = 4) -> dict:
     if num_uavs != 4:
         # 兼容只覆盖机器数量的旧配置，其未显式设置的设备参数沿用同质默认值。
         config["num_uavs"] = num_uavs
+        # 等分蛇形模板定义为四机；两机实现自检及旧任意机数场景继续使用圆轨迹。
+        config["trajectory"]["kind"] = "circle"
         config["uav"] = {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
                          "cycles_per_flop": 0.5, "energy_cap_j": 200000.0}
     return config
@@ -218,82 +233,161 @@ def training_budget(config: dict) -> dict:
             "mode": b["mode"], "effective_bound_verified": b["effective_bound_verified"]}
 
 
-def validate_config(c: dict) -> dict:
-    """校验形状、物理边界和研究协议；返回深拷贝，不检查输入文件是否存在。"""
-    c = copy.deepcopy(c)
-    def positive(x, name, integer=False):
-        if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) or x <= 0:
-            raise ValueError(f"{name} 必须为有限正数")
-        if integer and not isinstance(x, int):
-            raise ValueError(f"{name} 必须为整数")
+def require_positive(x, name, integer=False):
+    """校验单个有限正数；integer=True 时同时要求整数。"""
+    try:
+        finite = math.isfinite(x)
+    except (TypeError, OverflowError):
+        finite = False
+    if isinstance(x, bool) or not isinstance(x, (int, float)) or not finite or x <= 0:
+        raise ValueError(f"{name} 必须为有限正数")
+    if integer and not isinstance(x, int):
+        raise ValueError(f"{name} 必须为整数")
+
+def validate_training_config(c: dict):
+    """校验机器数量、种子和训练预算，并更新副本中的实际轮数。"""
     for key in ("num_uavs",):
-        positive(c[key], key, True)
+        require_positive(c[key], key, True)
     if isinstance(c["seed"], bool) or not isinstance(c["seed"], int) or c["seed"] < 0:
         raise ValueError("seed 必须为非负整数")
     for key in ("epochs", "batch_size", "torch_threads"):
-        positive(c["training"][key], key, True)
+        require_positive(c["training"][key], key, True)
     if c["training"]["aggregation_period"] != 2 or c["training"]["epochs"] % 2:
         raise ValueError("本研究 K=2，epochs 必须是正偶数")
-    positive(c["training"]["epoch_step_size"], "epoch_step_size")
+    require_positive(c["training"]["epoch_step_size"], "epoch_step_size")
     if c["budget"]["mode"] not in ("empirical", "theoretical"):
         raise ValueError("budget.mode 必须是 empirical/theoretical")
     c["training"]["epochs"] = training_budget(c)["epochs"]
+
+def validate_data_config(c: dict):
+    """校验数据与采样参数，并补齐兼容字段。"""
     d = c["data"]
     if d["kind"] not in ("cbcl", "synthetic") or d["partition"] not in ("iid", "dirichlet"):
         raise ValueError("data.kind=cbcl/synthetic，partition=iid/dirichlet")
-    positive(d["image_size"], "image_size", True)
+    require_positive(d["image_size"], "image_size", True)
     if d["image_size"] < 32:
         raise ValueError("ResNet18 image_size 至少 32")
     for key in ("patrol_epoch_s", "patrol_collection_fraction", "dirichlet_alpha", "synthetic_per_uav", "synthetic_eval_size"):
-        positive(d[key], key, key.startswith("synthetic"))
+        require_positive(d[key], key, key.startswith("synthetic"))
     if d["patrol_collection_fraction"] > 1:
         raise ValueError("patrol_collection_fraction 必须属于 (0,1]")
     if d["rate_per_s"] is not None:
-        positive(d["rate_per_s"], "rate_per_s")
+        require_positive(d["rate_per_s"], "rate_per_s")
     d.setdefault("samples_per_capture", 1)
     d.setdefault("sample_interval_s", None)
-    positive(d["samples_per_capture"], "samples_per_capture", True)
+    # 直接验证缺少新字段的旧完整 Config 时保留原比例语义；新默认已给 500。
+    d.setdefault("initial_samples_per_uav", None)
+    if d["initial_samples_per_uav"] is not None:
+        require_positive(d["initial_samples_per_uav"], "initial_samples_per_uav", True)
+    require_positive(d["samples_per_capture"], "samples_per_capture", True)
     if d["sample_interval_s"] is not None:
-        positive(d["sample_interval_s"], "sample_interval_s")
+        require_positive(d["sample_interval_s"], "sample_interval_s")
     if d["rate_per_s"] is not None and (d["sample_interval_s"] is not None or d["samples_per_capture"] != 1):
         raise ValueError("旧版 rate_per_s 与巡逻采样间隔/批量不能同时指定")
     if d["samples_per_uav"] is not None:
-        positive(d["samples_per_uav"], "samples_per_uav", True)
-    if not 0 < d["initial_fraction"] <= 1:
+        require_positive(d["samples_per_uav"], "samples_per_uav", True)
+    require_positive(d["initial_fraction"], "initial_fraction")
+    if d["initial_fraction"] > 1:
         raise ValueError("initial_fraction 必须属于 (0,1]")
     if min(d["val_fraction"], d["test_fraction"]) <= 0 or d["val_fraction"] + d["test_fraction"] >= 1:
         raise ValueError("验证/测试比例必须为正且和小于 1")
+
+def validate_hardware_config(c: dict):
+    """校验硬件、通信和任务的物理边界。"""
     for group in ("uav", "radio", "channel"):
         for key, val in c[group].items():
             if group == "uav" and isinstance(val, list):
                 if len(val) != c["num_uavs"]:
                     raise ValueError(f"uav.{key} 数组长度必须为 N")
                 for v in val:
-                    positive(v, f"uav.{key}")
+                    require_positive(v, f"uav.{key}")
             else:
-                positive(val, key)
+                require_positive(val, key)
     for key, val in c["server"].items():
         if key in ("aggregation_time_s", "aggregation_energy_j"):
             if not math.isfinite(val) or val < 0:
                 raise ValueError(f"{key} 必须非负")
         else:
-            positive(val, key)
-    positive(c["task"]["epoch_deadline_s"], "epoch_deadline_s")
+            require_positive(val, key)
+    require_positive(c["task"]["epoch_deadline_s"], "epoch_deadline_s")
     if not math.isfinite(c["task"]["fixed_energy_j"]) or c["task"]["fixed_energy_j"] < 0:
         raise ValueError("fixed_energy_j 必须非负")
+
+def require_finite_vector(values, length: int, name: str):
+    """校验有限坐标/相位向量；拒绝 bool、字符串及嵌套形状。"""
+    if not isinstance(values, (list, tuple, np.ndarray)) or np.shape(values) != (length,):
+        raise ValueError(f"{name} 必须为长度 {length} 的有限数值向量")
+    for value in values:
+        try:
+            finite = math.isfinite(value)
+        except (TypeError, OverflowError):
+            finite = False
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)) or not finite:
+            raise ValueError(f"{name} 必须为长度 {length} 的有限数值向量")
+
+def validate_serpentine_trajectory(t: dict, num_uavs: int):
+    """校验四机等长蛇形的圆角空间和每条直段达到巡航速度所需的加减速距离。"""
+    if num_uavs != 4:
+        raise ValueError("serpentine_equal 轨迹要求 num_uavs=4")
+    require_finite_vector(t["center_xy_m"], 2, "center_xy_m")
+    require_finite_vector(t["phase_offsets_fraction"], 4, "phase_offsets_fraction")
+    if any(value < 0 or value >= 1 for value in t["phase_offsets_fraction"]):
+        raise ValueError("phase_offsets_fraction 必须属于 [0,1)")
+    for key in ("region_size_m", "scan_rows", "turn_radius_m", "turn_speed_m_s",
+                "tangential_acceleration_m_s2"):
+        require_positive(t[key], key, key == "scan_rows")
+    if t["scan_rows"] < 2 or t["scan_rows"] % 2:
+        raise ValueError("scan_rows 必须为不小于 2 的正偶数，才能闭合蛇形回路")
+    for key in ("edge_margin_m", "cross_margin_m"):
+        value = t[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"{key} 必须为有限非负数")
+    if t["turn_speed_m_s"] > t["speed_m_s"]:
+        raise ValueError("turn_speed_m_s 不能大于 speed_m_s")
+    half = t["region_size_m"] / 2
+    spacing = (half - 2 * t["cross_margin_m"]) / (t["scan_rows"] - 1)
+    radius = t["turn_radius_m"]
+    straight_lengths = (half - 2 * t["edge_margin_m"] - 2 * radius,
+                        spacing - 2 * radius,
+                        half - 2 * t["cross_margin_m"] - 2 * radius)
+    if min(straight_lengths) <= 0:
+        raise ValueError("蛇形轨迹的圆角裁剪后直段必须为正；请调整区域、边距、行数或转弯半径")
+    speed, turn_speed = t["speed_m_s"], t["turn_speed_m_s"]
+    acceleration_distance = (0.0 if speed == turn_speed else
+                             (speed - turn_speed) * (speed + turn_speed) / t["tangential_acceleration_m_s2"])
+    if not math.isfinite(acceleration_distance) or min(straight_lengths) < acceleration_distance:
+        raise ValueError("蛇形直段不足以按 tangential_acceleration_m_s2 加速至巡航速度再减速至转弯速度")
+
+def validate_trajectory_config(c: dict):
+    """校验轨迹种类、有限空间坐标、高度，以及对应路径的物理可行性。"""
     t = c["trajectory"]
-    if len(t["server_xyz_m"]) != 3 or not np.isfinite(t["server_xyz_m"]).all():
-        raise ValueError("server_xyz_m 必须为有限三维坐标")
-    if t["altitude_m"] <= t["server_xyz_m"][2]:
+    # 缺字段的旧完整 Config 使用旧圆轨迹，不隐式迁移成新蛇形。
+    kind = t.setdefault("kind", "circle")
+    if kind not in ("circle", "serpentine_equal"):
+        raise ValueError("trajectory.kind 必须为 circle/serpentine_equal")
+    require_finite_vector(t["server_xyz_m"], 3, "server_xyz_m")
+    altitude = t["altitude_m"]
+    if isinstance(altitude, bool) or not isinstance(altitude, (int, float)) or not math.isfinite(altitude):
+        raise ValueError("altitude_m 必须为有限数值")
+    if altitude <= t["server_xyz_m"][2]:
         raise ValueError("UAV 必须高于地面服务器")
-    for key in ("speed_m_s", "radius_min_m", "radius_max_m"):
-        positive(t[key], key)
-    if t["radius_max_m"] < t["radius_min_m"] or not math.isfinite(t["center_offset_m"]):
-        raise ValueError("轨迹半径/中心偏移不合法")
+    require_positive(t["speed_m_s"], "speed_m_s")
+    if kind == "serpentine_equal":
+        validate_serpentine_trajectory(t, c["num_uavs"])
+    else:
+        for key in ("radius_min_m", "radius_max_m"):
+            require_positive(t[key], key)
+        offset = t["center_offset_m"]
+        if (t["radius_max_m"] < t["radius_min_m"] or isinstance(offset, bool)
+                or not isinstance(offset, (int, float)) or not math.isfinite(offset)):
+            raise ValueError("轨迹半径/中心偏移不合法")
+
+def validate_optimization_config(c: dict):
+    """校验优化策略、切点、容差和参考资源比例。"""
     o = c["optimization"]
     o.setdefault("split_objective", "reference_score")
     o.setdefault("split_workers", 1)
-    positive(o["split_workers"], "split_workers", True)
+    require_positive(o["split_workers"], "split_workers", True)
     if o["split_objective"] not in ("reference_score", "optimized_window"):
         raise ValueError("split_objective 必须为 reference_score/optimized_window")
     if o["strategy"] not in ("dynamic_opt", "fixed_opt", "fixed_fixed", "no_window"):
@@ -302,30 +396,72 @@ def validate_config(c: dict) -> dict:
         raise ValueError("reference_recovery 必须为 none/rebuild")
     validate_split_point(o["fixed_split"])
     for key in ("window_epochs", "max_iterations"):
-        positive(o[key], key, True)
+        require_positive(o[key], key, True)
     for key in ("relative_tolerance", "feasibility_tolerance", "positive_floor"):
-        positive(o[key], key)
+        require_positive(o[key], key)
     if o["positive_floor"] * c["num_uavs"] >= 1:
         raise ValueError("数值正下界过大，无法分配带宽")
     for v in c["reference"].values():
         if not 0 < v <= 1:
             raise ValueError("参考资源比例必须属于 (0,1]")
+
+def validate_snapshot_config(c: dict):
+    """校验共同样本快照的长度、正整数计数和单调性。"""
+    d = c["data"]
     fixed = d["fixed_epoch_counts"]
     if fixed is not None:
         if len(fixed) != c["training"]["epochs"]:
             raise ValueError("fixed_epoch_counts 长度必须等于训练轮数")
         for v in fixed:
-            positive(v, "fixed_epoch_counts", True)
+            require_positive(v, "fixed_epoch_counts", True)
         if any(a > b for a, b in zip(fixed, fixed[1:])):
             raise ValueError("统一样本快照必须非减")
+
+def migrate_config_updates(updates: dict) -> dict:
+    """按输入字段识别旧模式；旧圆参数、旧初始比例均保留原语义。"""
+    result = copy.deepcopy(updates)
+    trajectory = result.get("trajectory", {})
+    old_circle_fields = ("radius_min_m", "radius_max_m", "center_offset_m")
+    if "kind" not in trajectory and any(key in trajectory for key in old_circle_fields):
+        trajectory["kind"] = "circle"
+    data = result.get("data", {})
+    if "initial_samples_per_uav" not in data and "initial_fraction" in data:
+        data["initial_samples_per_uav"] = None
+    return result
+
+def smoke_config(config: dict):
+    """生成四机四轮合成数据诊断配置，保留原 smoke 覆盖参数。"""
+    return validate_config(merge_config(config, {"num_uavs": 4,
+        "data": {"kind": "synthetic", "image_size": 32, "synthetic_per_uav": 4,
+                 "synthetic_eval_size": 3, "samples_per_uav": None, "initial_fraction": 0.5,
+                 "initial_samples_per_uav": None,
+                 "fixed_epoch_counts": None},
+        "training": {"epochs": 4, "batch_size": 2, "epoch_step_size": 0.001,
+                     "checkpoint": None, "allow_random_init": True, "save_checkpoint": False},
+        "uav": {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
+                "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
+        "budget": {"mode": "empirical"},
+        "optimization": {"max_iterations": 15, "split_objective": "reference_score"}}))
+
+
+def validate_config(c: dict) -> dict:
+    """校验形状、物理边界和研究协议；返回深拷贝，不检查输入文件是否存在。"""
+    c = copy.deepcopy(c)
+    validate_training_config(c)
+    validate_data_config(c)
+    validate_hardware_config(c)
+    validate_trajectory_config(c)
+    validate_optimization_config(c)
+    validate_snapshot_config(c)
     return c
 
 
 def load_config(path: str | None = None, updates: dict | None = None) -> dict:
     """读取可选 JSON 和内存覆盖，返回验证后的 Config；相对路径相对 JSON。"""
     source = Path(path).resolve() if path else None
-    file_updates = json.loads(source.read_text(encoding="utf-8-sig")) if source else {}
-    num_uavs = (updates or {}).get("num_uavs", file_updates.get("num_uavs", 4))
+    file_updates = migrate_config_updates(json.loads(source.read_text(encoding="utf-8-sig"))) if source else {}
+    memory_updates = migrate_config_updates(updates or {})
+    num_uavs = memory_updates.get("num_uavs", file_updates.get("num_uavs", 4))
     c = default_config(num_uavs)
     if path:
         c = merge_config(c, file_updates)
@@ -335,7 +471,7 @@ def load_config(path: str | None = None, updates: dict | None = None) -> dict:
                 c[group][key] = str(p if p.is_absolute() else source.parent / p)
         p = Path(c["output_root"]).expanduser()
         c["output_root"] = str(p if p.is_absolute() else source.parent / p)
-    return validate_config(merge_config(c, updates or {}))
+    return validate_config(merge_config(c, memory_updates))
 
 
 def json_value(value: Any) -> Any:
@@ -436,10 +572,31 @@ def patrol_radii(config: dict) -> np.ndarray:
     return np.linspace(trajectory["radius_min_m"], trajectory["radius_max_m"], config["num_uavs"])
 
 
-def sample_release_schedule(capacity: int, config: dict) -> tuple[np.ndarray, dict]:
-    """返回每机共同可用的第 j 个样本的物理时刻，以及可复算的巡逻计划。"""
+def initial_sample_count(capacity: int, config: dict) -> int:
+    """确定首轮每机样本数：显式固定数优先，None 回退比例；不截断超容量请求。"""
+    require_positive(capacity, "capacity", True)
     d = config["data"]
-    initial = max(1, math.floor(capacity * d["initial_fraction"]))
+    requested = d.get("initial_samples_per_uav")
+    if requested is not None:
+        require_positive(requested, "initial_samples_per_uav", True)
+        if requested > capacity:
+            raise ValueError(f"initial_samples_per_uav={requested} 超过每机真实样本容量 {capacity}")
+        return requested
+    fraction = d["initial_fraction"]
+    require_positive(fraction, "initial_fraction")
+    if fraction > 1:
+        raise ValueError("initial_fraction 必须属于 (0,1]")
+    return max(1, math.floor(capacity * fraction))
+
+
+def sample_release_schedule(capacity: int, config: dict) -> tuple[np.ndarray, dict]:
+    """返回每机共同释放表；默认时刻 0 已有固定初始数，其余按原巡逻计划采集。
+
+    rate_per_s 显式使用旧恒速语义：全部样本从 1/rate 开始逐个到达，
+    初始数只决定首轮等待到第几个样本，不把这些样本提前移至时刻 0。
+    """
+    d = config["data"]
+    initial = initial_sample_count(capacity, config)
     if d["rate_per_s"] is not None:
         release = np.arange(1, capacity + 1, dtype=float) / d["rate_per_s"]
         return release, {"mode": "constant_rate", "initial_count": initial, "rate_per_s": d["rate_per_s"]}
@@ -872,21 +1029,193 @@ def grouped_profile(profile: dict) -> dict:
 
 
 # 4. 给定轨迹、平均大尺度信道与原始成本 ------------------------------------------
+def _patrol_line(start: np.ndarray, end: np.ndarray, speed: float,
+                 turn_speed: float, acceleration: float) -> dict:
+    """构造两端为转弯速度、可升至巡航速度的直线段及解析速度剖面。"""
+    length = float(np.linalg.norm(end - start))
+    ramp_distance = (speed ** 2 - turn_speed ** 2) / (2 * acceleration)
+    if length <= 0 or length + 1e-10 < 2 * ramp_distance:
+        raise ValueError("圆角后的每段直线必须为正且足以完成加速与减速")
+    ramp_time = (speed - turn_speed) / acceleration
+    cruise_distance = max(0.0, length - 2 * ramp_distance)
+    cruise_time = cruise_distance / speed
+    return {"kind": "line", "start_xy_m": start.tolist(), "end_xy_m": end.tolist(),
+            "length_m": length, "duration_s": 2 * ramp_time + cruise_time,
+            "direction_xy": ((end - start) / length).tolist(),
+            "start_speed_m_s": turn_speed, "peak_speed_m_s": speed,
+            "acceleration_m_s2": acceleration, "accel_distance_m": ramp_distance,
+            "cruise_distance_m": cruise_distance, "accel_time_s": ramp_time,
+            "cruise_time_s": cruise_time}
+
+@lru_cache(maxsize=32)
+def _serpentine_template(region_size: float, rows: int, edge: float, cross: float,
+                          radius: float, speed: float, turn_speed: float,
+                          acceleration: float) -> dict:
+    """按轨迹几何数值缓存 NE 模板；缓存仅内部只读，公开接口返回独立副本。"""
+    half = region_size / 2
+    ys = np.linspace(cross, half - cross, rows)
+    vertices = [np.array([edge, ys[0]])]
+    for index, y in enumerate(ys):
+        x = half - edge if index % 2 == 0 else edge
+        vertices.append(np.array([x, y]))
+        if index + 1 < rows:
+            vertices.append(np.array([x, ys[index + 1]]))
+    entries, exits, centers, signs = [], [], [], []
+    raw_length = 0.0
+    for index, vertex in enumerate(vertices):
+        previous, following = vertices[index - 1], vertices[(index + 1) % len(vertices)]
+        incoming, outgoing = vertex - previous, following - vertex
+        raw_length += float(np.linalg.norm(outgoing))
+        incoming /= np.linalg.norm(incoming)
+        outgoing /= np.linalg.norm(outgoing)
+        if not np.isclose(np.dot(incoming, outgoing), 0.0, atol=1e-12):
+            raise ValueError("蛇形闭合路线的相邻边必须垂直")
+        entries.append(vertex - radius * incoming)
+        exits.append(vertex + radius * outgoing)
+        centers.append(entries[-1] + radius * outgoing)
+        signs.append(float(incoming[0] * outgoing[1] - incoming[1] * outgoing[0]))
+    segments, elapsed = [], 0.0
+    # 周期起点为第一个圆角的出切点，默认 (20,40)，不是已切除的 (10,40)。
+    for index in range(len(vertices)):
+        corner = (index + 1) % len(vertices)
+        line = _patrol_line(exits[index], entries[corner], speed, turn_speed, acceleration)
+        arc = {"kind": "arc", "start_xy_m": entries[corner].tolist(),
+               "end_xy_m": exits[corner].tolist(), "center_xy_m": centers[corner].tolist(),
+               "radius_m": radius, "length_m": np.pi * radius / 2,
+               "duration_s": np.pi * radius / (2 * turn_speed),
+               "start_angle_rad": float(np.arctan2(*(entries[corner] - centers[corner])[::-1])),
+               "sweep_angle_rad": signs[corner] * np.pi / 2, "speed_m_s": turn_speed}
+        for segment in (line, arc):
+            segment["start_time_s"] = elapsed
+            elapsed += segment["duration_s"]
+            segment["end_time_s"] = elapsed
+            segments.append(segment)
+    return {"kind": "serpentine_equal", "segments": segments,
+            "vertices_xy_m": [v.tolist() for v in vertices],
+            "start_xy_m": exits[0].tolist(), "raw_length_m": raw_length,
+            "length_m": sum(s["length_m"] for s in segments), "period_s": elapsed,
+            "turn_count": len(vertices)}
+
+def _patrol_template(config: dict) -> dict:
+    """读取几何值组成缓存键；位置、服务器、时间和其他配置不会污染缓存。"""
+    t = config["trajectory"]
+    rows = t.get("scan_rows", 6)
+    if config["num_uavs"] != 4 or isinstance(rows, bool) or not isinstance(rows, (int, np.integer)) or rows < 2 or rows % 2:
+        raise ValueError("serpentine_equal 要求四架 UAV 且 scan_rows 为至少 2 的偶数")
+    values = [float(t.get(key, default)) for key, default in (
+        ("region_size_m", 1000.0), ("edge_margin_m", 10.0), ("cross_margin_m", 40.0),
+        ("turn_radius_m", 10.0), ("speed_m_s", 10.0), ("turn_speed_m_s", 5.0),
+        ("tangential_acceleration_m_s2", 2.0))]
+    size, edge, cross, radius, speed, turn_speed, acceleration = values
+    if not np.isfinite(values).all() or min(size, radius, speed, turn_speed, acceleration) <= 0 or min(edge, cross) < 0:
+        raise ValueError("蛇形区域、圆角、速度和加速度必须有限为正，边距必须有限非负")
+    if turn_speed > speed:
+        raise ValueError("turn_speed_m_s 不能大于 speed_m_s")
+    straight_lengths = [size / 2 - 2 * edge - 2 * radius,
+                        (size / 2 - 2 * cross) / (rows - 1) - 2 * radius,
+                        size / 2 - 2 * cross - 2 * radius]
+    if min(straight_lengths) <= 0:
+        raise ValueError("扫描区域及行距不足以容纳圆角")
+    return _serpentine_template(size, int(rows), edge, cross, radius, speed, turn_speed, acceleration)
+
+def _patrol_frame(config: dict) -> tuple[np.ndarray, np.ndarray]:
+    """返回与服务器坐标独立的区域中心，以及四机的周期时间相位比例。"""
+    t = config["trajectory"]
+    center = np.asarray(t.get("center_xy_m", [0.0, 0.0]), dtype=float)
+    phases = np.asarray(t.get("phase_offsets_fraction", [0.0, 0.25, 0.5, 0.75]), dtype=float)
+    if center.shape != (2,) or not np.isfinite(center).all():
+        raise ValueError("center_xy_m 必须是有限二维坐标")
+    if phases.shape != (4,) or not np.isfinite(phases).all() or np.any((phases < 0) | (phases >= 1)):
+        raise ValueError("phase_offsets_fraction 必须为四个 [0,1) 内的有限数")
+    return center, phases
+
+def patrol_geometry(config: dict) -> dict:
+    """返回独立轨迹几何；蛇形含模板线/弧段和共同周期，圆形含各机周长/周期。
+
+    蛇形 segments 为相对区域中心的 NE 模板，周期从默认 (20,40) 向右出发。
+    四机分别旋转 0/90/180/270 度，并按 phase_offsets_s 做时间错相。
+    长度/覆盖属于给定轨迹模型；圆形分支保留旧版给定轨迹的数值行为。
+    """
+    kind = config["trajectory"].get("kind", "circle")
+    if kind == "circle":
+        radii = patrol_radii(config)
+        lengths = 2 * np.pi * radii
+        return {"kind": kind, "segments": [], "radii_m": radii,
+                "length_m": lengths, "period_s": lengths / config["trajectory"]["speed_m_s"]}
+    if kind != "serpentine_equal":
+        raise ValueError(f"未知轨迹 kind: {kind}")
+    result = copy.deepcopy(_patrol_template(config))
+    center, phases = _patrol_frame(config)
+    result.update(center_xy_m=center.tolist(), rotation_rad=(np.arange(4) * np.pi / 2).tolist(),
+                  phase_offsets_s=(phases * result["period_s"]).tolist())
+    return result
+
+def _patrol_segment_position(segment: dict, time_s: float) -> np.ndarray:
+    """按线段的加减速或圆弧的匀速，解析求出段内位置。"""
+    elapsed = min(max(time_s, 0.0), segment["duration_s"])
+    if segment["kind"] == "arc":
+        angle = segment["start_angle_rad"] + segment["sweep_angle_rad"] * elapsed / segment["duration_s"]
+        return np.asarray(segment["center_xy_m"]) + segment["radius_m"] * np.array([np.cos(angle), np.sin(angle)])
+    v0, acceleration = segment["start_speed_m_s"], segment["acceleration_m_s2"]
+    if elapsed < segment["accel_time_s"]:
+        distance = v0 * elapsed + acceleration * elapsed ** 2 / 2
+    elif elapsed < segment["accel_time_s"] + segment["cruise_time_s"]:
+        distance = segment["accel_distance_m"] + segment["peak_speed_m_s"] * (elapsed - segment["accel_time_s"])
+    else:
+        remaining = segment["duration_s"] - elapsed
+        distance = segment["length_m"] - v0 * remaining - acceleration * remaining ** 2 / 2
+    return np.asarray(segment["start_xy_m"]) + distance * np.asarray(segment["direction_xy"])
+
+def patrol_positions(physical_s: float, config: dict) -> np.ndarray:
+    """返回标量物理时刻的 XYZ[N,3]；周期首尾及所有线/弧接点位置、速度连续。"""
+    physical_s = float(physical_s)
+    if not np.isfinite(physical_s):
+        raise ValueError("physical_s 必须有限")
+    n, t = config["num_uavs"], config["trajectory"]
+    kind = t.get("kind", "circle")
+    if kind == "circle":
+        radius = patrol_radii(config)
+        phase = 2 * np.pi * np.arange(n) / n
+        angle = phase + t["speed_m_s"] * physical_s / radius
+        return np.column_stack((radius * np.cos(angle) + t["center_offset_m"] * np.cos(phase),
+                                radius * np.sin(angle) + t["center_offset_m"] * np.sin(phase),
+                                np.full(n, t["altitude_m"])))
+    if kind != "serpentine_equal":
+        raise ValueError(f"未知轨迹 kind: {kind}")
+    template = _patrol_template(config)
+    center, phases = _patrol_frame(config)
+    segments, period = template["segments"], template["period_s"]
+    end_times = [segment["end_time_s"] for segment in segments]
+    xyz = np.empty((4, 3), dtype=float)
+    for uid, fraction in enumerate(phases):
+        local_time = (physical_s + fraction * period) % period
+        index = min(int(np.searchsorted(end_times, local_time, side="right")), len(segments) - 1)
+        xy = _patrol_segment_position(segments[index], local_time - segments[index]["start_time_s"])
+        x, y = xy
+        rotated = ((x, y), (-y, x), (-x, -y), (y, -x))[uid]
+        xyz[uid, :2], xyz[uid, 2] = np.asarray(rotated) + center, t["altitude_m"]
+    return xyz
+
+
 def channel_at(physical_s: float, config: dict) -> dict:
-    """式(6)—(8)：给定偏心圆巡逻轨迹的确定性平均功率增益；无小尺度随机衰落。"""
-    n, t, c = config["num_uavs"], config["trajectory"], config["channel"]
-    radius = patrol_radii(config)
-    phase = 2 * np.pi * np.arange(n) / n
-    angle = phase + t["speed_m_s"] * physical_s / radius
-    xyz = np.column_stack((radius * np.cos(angle) + t["center_offset_m"] * np.cos(phase),
-                           radius * np.sin(angle) + t["center_offset_m"] * np.sin(phase),
-                           np.full(n, t["altitude_m"])))
+    """式(6)—(8)：在给定巡逻轨迹上计算确定性大尺度平均增益，无小尺度衰落。
+
+    轨迹位置连续；实验主循环仍在轮初冻结信道，不在整轮内部积分。
+    """
+    t, c = config["trajectory"], config["channel"]
+    xyz = patrol_positions(physical_s, config)
     delta = xyz - np.asarray(t["server_xyz_m"])
     distance = np.linalg.norm(delta, axis=1)
     elevation = np.degrees(np.arcsin(np.clip(delta[:, 2] / distance, -1, 1)))
     probability = 1 / (1 + c["los_a"] * np.exp(-c["los_b"] * (elevation - c["los_a"])))
     gain = probability * c["beta_l"] * distance ** (-c["alpha_l"]) + (1 - probability) * c["beta_n"] * distance ** (-c["alpha_n"])
-    return {"xyz_m": xyz, "distance_m": distance, "elevation_deg": elevation, "los_probability": probability, "gain": gain}
+    result = {"xyz_m": xyz, "distance_m": distance, "elevation_deg": elevation, "los_probability": probability, "gain": gain}
+    if t.get("kind", "circle") == "serpentine_equal":
+        template = _patrol_template(config)
+        _, phases = _patrol_frame(config)
+        result.update(trajectory_kind="serpentine_equal", patrol_period_s=template["period_s"],
+                      patrol_length_m=template["length_m"], phase_offsets_s=phases * template["period_s"])
+    return result
 
 
 def uav_parameter(config: dict, key: str) -> np.ndarray:
@@ -1646,21 +1975,22 @@ def execute_experiment(config, train, data, profile, output, version):
 
 
 # 8. 有意义的协议验证：五切点梯度、尾批、聚合通信、可行性与能量下降 ---------------
-def verify_implementation(config: dict) -> dict:
-    """小型 CPU 验证；返回检查结果，失败抛 AssertionError。不作为实验准确率。"""
-    import torch
-    from torch.nn import functional as F
+def _verification_config(config: dict):
+    """返回协议验证所用的小规模独立配置。"""
     c = load_config(updates={"num_uavs": 2, "data": {"kind": "synthetic", "image_size": 32,
-                            "synthetic_per_uav": 5, "synthetic_eval_size": 3, "initial_fraction": 0.6},
+                            "synthetic_per_uav": 5, "synthetic_eval_size": 3,
+                            "initial_samples_per_uav": None, "initial_fraction": 0.6},
                             "training": {"epochs": 4, "batch_size": 2, "allow_random_init": True, "save_checkpoint": False},
                             "uav": {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
                                     "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
                             "optimization": {"max_iterations": 15, "split_objective": "reference_score"},
                             "output_root": config["output_root"]})
-    torch.set_num_threads(c["training"]["torch_threads"])
-    model, _ = initialize_model(c)
-    data = prepare_data(c)
-    x, y = load_batch(data, data["clients"][0][:2], "cpu")
+    return c
+
+def _verify_split_gradients(model: dict, x: Any, y: Any):
+    """核对五个切点的梯度与完整网络梯度，并核对单步更新。"""
+    import torch
+    from torch.nn import functional as F
     names = list(model["params"])
     logits = forward_suffix(model, forward_prefix(model, x, 0), 0)
     grads = dict(zip(names, torch.autograd.grad(F.cross_entropy(logits, y), list(model["params"].values()))))
@@ -1673,6 +2003,12 @@ def verify_implementation(config: dict) -> dict:
         stepped = sgd_step(model, split_grads, 0.01)
         for name in names:
             torch.testing.assert_close(stepped["params"][name], model["params"][name] - 0.01 * grads[name], rtol=2e-5, atol=2e-6)
+    return errors
+
+def _verify_training_and_aggregation(model: dict, data: dict, c: dict):
+    """核对尾批累计步长、输入不变性和按样本数加权聚合。"""
+    import torch
+    names = list(model["params"])
     original = {name: value.detach().clone() for name, value in model["params"].items()}
     updated, stats = train_client_epoch(model, data, data["clients"][0][:3], 4, 1, 0, c)
     assert math.isclose(stats["step_sum"], c["training"]["epoch_step_size"], rel_tol=1e-12)
@@ -1681,6 +2017,9 @@ def verify_implementation(config: dict) -> dict:
     average = aggregate_models([model, updated], [1, 3])
     for name in names:
         torch.testing.assert_close(average["params"][name], model["params"][name] * 0.25 + updated["params"][name] * 0.75)
+
+def _verify_release_and_partitions(data: dict, c: dict):
+    """核对轮初样本冻结、周期与旧版释放计划以及集合互斥。"""
     snap = epoch_snapshot(data, data["start_s"], 1, c)
     assert snap["count"] == 3
     later = epoch_snapshot(data, data["release_s"][3], 2, c)
@@ -1692,7 +2031,8 @@ def verify_implementation(config: dict) -> dict:
     assert np.count_nonzero(release == 0) == initial
     np.testing.assert_allclose(np.diff(release[initial - 1:]), plan["sample_interval_s"])
     assert math.isclose(release[-1], plan["target_s"])
-    manual = merge_config(patrol_config, {"data": {"sample_interval_s": 5, "samples_per_capture": 2}})
+    manual = merge_config(patrol_config, {"data": {"initial_samples_per_uav": None,
+                         "sample_interval_s": 5, "samples_per_capture": 2}})
     manual_release, _ = sample_release_schedule(6, manual)
     np.testing.assert_array_equal(manual_release, [0, 5, 5, 10, 10, 15])
     np.testing.assert_array_equal(np.searchsorted(manual_release, [4.9, 5, 9.9, 10, 20], side="right"),
@@ -1702,10 +2042,9 @@ def verify_implementation(config: dict) -> dict:
     np.testing.assert_array_equal(legacy_release, [1, 2, 3, 4, 5])
     groups = [set(ids) for ids in data["clients"]] + [set(data["val"]), set(data["test"])]
     assert all(not a & b for i, a in enumerate(groups) for b in groups[i + 1:])
-    profile = profile_splits(model, c)
-    remaining = np.full(2, c["uav"]["energy_cap_j"])
-    h = channel_at(data["start_s"], c)["gain"]
-    reference = reference_resources(c)
+
+def _verify_heterogeneous_resources(profile: dict, h: np.ndarray, c: dict):
+    """核对逐机画像、硬件上限、旧画像兼容性和固定功率可行性。"""
     heterogeneous = load_config(updates={"num_uavs": 2,
         "uav": {"kappa": [1e-28, 1.4e-28], "compute_power_max_w": [0.1, 0.3375],
                 "power_max_w": [0.3, 0.8], "cycles_per_flop": [1.0, 0.5], "energy_cap_j": [30.0, 40.0]}})
@@ -1730,6 +2069,9 @@ def verify_implementation(config: dict) -> dict:
     phase = convex_subproblem(hetero_problem, hetero_profile, heterogeneous, fixed_power=0.3)
     assert phase["ok"] and audit_resources(hetero_problem, phase["resources"], hetero_profile, heterogeneous)["ok"]
     assert reference_scores(3, h, hetero_resource, hetero_profile, True, heterogeneous).shape == (2, 5)
+
+def _verify_stage_costs_and_solver(profile: dict, h: np.ndarray, remaining: np.ndarray, reference: dict, c: dict):
+    """核对各轮阶段时延、同步载荷和求解后的可行性与能量下降。"""
     results = []
     for epoch, next_split in ((1, None), (2, np.array([8, 2])), (4, None)):
         problem = make_problem(epoch, 3, h, np.array([0, 4]), next_split, remaining, c)
@@ -1751,6 +2093,10 @@ def verify_implementation(config: dict) -> dict:
         accepted = [r["energy_j"] for r in solution["trace"] if r.get("accepted", True)]
         assert all(new <= old for old, new in zip(accepted, accepted[1:]))
         results.append({"epoch": epoch, "status": solution["status"], "energy_j": solution["metrics"]["total_energy_j"]})
+    return results
+
+def _verify_infeasibility_and_battery(profile: dict, h: np.ndarray, remaining: np.ndarray, reference: dict, c: dict):
+    """核对不可能任务被拒绝，以及收紧电池时的约束求解。"""
     # 低电池与不可能期限必须拒绝，不能静默返回参考资源。
     problem = make_problem(1, 3, h, np.array([0, 4]), None, np.zeros(2), c)
     assert not audit_resources(problem, reference, profile, c)["ok"]
@@ -1765,6 +2111,9 @@ def verify_implementation(config: dict) -> dict:
     tight_solution = solve_resources(tight, profile, c)
     assert tight_solution["ok"], tight_solution
     assert audit_resources(tight, tight_solution["resources"], profile, c)["ok"]
+
+def _verify_reference_recovery_and_ranking(profile: dict, h: np.ndarray, remaining: np.ndarray, c: dict):
+    """核对严格参考失败、显式参考恢复和全部切分组合排序。"""
     # 使用一个过慢的固定参考，严格 P1 应拒绝，显式重建可恢复参考可行性。
     slow = reference_resources(c)
     slow["frequency_hz"][:] = 1000.0
@@ -1781,17 +2130,191 @@ def verify_implementation(config: dict) -> dict:
     assert selection["scores_j"].shape == (c["num_uavs"], len(SPLIT_POINTS))
     expected = sorted(feasible_rows, key=lambda row: (row["score_j"], row["vector"] != (0, 4), row["vector"]))
     assert ranked == [row["vector"] for row in expected]
+
+def _verify_budget_and_channel(c: dict):
+    """核对训练预算取整和信道计算的确定性。"""
     assert training_budget(default_config())["conditional_epochs"] == 100
     # 相同原始轨迹时刻必须产生完全相同的信道，不依赖调用顺序。
     np.testing.assert_array_equal(channel_at(20, c)["gain"], channel_at(20, c)["gain"])
+
+def _verify_absolute_initial_samples(config: dict) -> dict:
+    """独立核对默认500优先于比例，以及首次新增和全量释放的快照边界。"""
+    release, plan = sample_release_schedule(5552, config)
+    assert plan["initial_count"] == 500
+    assert np.count_nonzero(release == 0) == 500
+    assert release[499] == 0 < release[500]
+    data = {"release_s": release, "capacity": 5552,
+            "clients": [list(range(5552)) for _ in range(4)]}
+    initial = epoch_snapshot(data, 0.0, 1, config)
+    before = epoch_snapshot(data, float(np.nextafter(release[500], -np.inf)), 2, config)
+    after = epoch_snapshot(data, float(release[500]), 2, config)
+    final = epoch_snapshot(data, float(release[-1]), 120, config)
+    assert initial["count"] == before["count"] == 500
+    assert after["count"] == 501 and final["count"] == 5552
+    assert all(len(indices) == 500 for indices in initial["indices"])
+    full_release, full_plan = sample_release_schedule(500, config)
+    np.testing.assert_array_equal(full_release, np.zeros(500))
+    assert full_plan["initial_count"] == 500
+    # 旧恒速模式不提前释放500个样本；启动等待仍由第500个到达时刻决定。
+    rate_config = merge_config(config, {"data": {"rate_per_s": 2.0}})
+    rate_release, rate_plan = sample_release_schedule(501, rate_config)
+    assert rate_plan["initial_count"] == 500 and rate_release[499] == 250.0
+    return {"initial_count": initial["count"], "capacity": 5552,
+            "first_new_sample_s": float(release[500]), "full_release_s": float(release[-1])}
+
+def _verify_initial_capacity_and_small_data(config: dict):
+    """不足500的正式容量应拒绝；显式回退比例的小合成数据仍能准备。"""
+    for capacity in (499, 0, -1, 1.5, True):
+        try:
+            sample_release_schedule(capacity, config)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"非法或小于默认初始量的容量未被拒绝: {capacity!r}")
+    small = load_config(updates={"data": {"kind": "synthetic", "initial_samples_per_uav": None,
+        "initial_fraction": 0.6, "synthetic_per_uav": 5, "synthetic_eval_size": 3},
+        "training": {"epochs": 4}})
+    data = prepare_data(small)
+    assert data["capacity"] == 5 and data["release_plan"]["initial_count"] == 3
+    assert epoch_snapshot(data, data["start_s"], 1, small)["count"] == 3
+    assert default_config(2)["trajectory"]["kind"] == "circle"
+
+def _verify_serpentine_lengths_and_period(config: dict, geometry: dict) -> dict:
+    """以独立解析值及黑箱积分核对四机闭合长度和共同周期。"""
+    # 六段480m横扫、五段84m连接、420m闭合；12个R10圆角替换直角。
+    expected_length = 3480.0 + 60.0 * math.pi
+    # 直线峰值10、转弯5、切向加速度2：24次速度过渡额外耗时15s。
+    expected_period = 348.0 + 12.0 * math.pi + 15.0
+    assert math.isclose(geometry["raw_length_m"], 3720.0, rel_tol=1e-12)
+    assert math.isclose(geometry["length_m"], expected_length, rel_tol=1e-12)
+    assert math.isclose(geometry["period_s"], expected_period, rel_tol=1e-12)
+    period = geometry["period_s"]
+    for t in (0.0, 0.017 * period, 0.41 * period, period - 1e-4):
+        np.testing.assert_allclose(patrol_positions(t, config), patrol_positions(t + period, config),
+                                   rtol=0, atol=1e-8)
+    np.testing.assert_allclose(patrol_positions(-1e-4, config),
+                               patrol_positions(period - 1e-4, config), rtol=0, atol=1e-8)
+    times = np.linspace(0.0, period, 4097)
+    positions = np.stack([patrol_positions(float(t), config) for t in times])
+    assert positions.shape == (4097, 4, 3) and np.isfinite(positions).all()
+    lengths = np.linalg.norm(np.diff(positions, axis=0), axis=2).sum(axis=0)
+    # 有限采样的折线略短于圆弧；容差只用于此独立数值积分。
+    np.testing.assert_allclose(lengths, expected_length, rtol=0, atol=0.15)
+    np.testing.assert_allclose(lengths, lengths[0], rtol=0, atol=0.02)
+    return {"raw_length_m": 3720.0, "rounded_length_m": expected_length,
+            "period_s": expected_period, "sampled_lengths_m": lengths.tolist()}
+
+def _verify_serpentine_rotation_and_phase(config: dict, geometry: dict):
+    """核对象限与同高边界、旋转关系，以及错相只打破同步的信道序列。"""
+    period = geometry["period_s"]
+    zero_phase = merge_config(config, {"trajectory": {"phase_offsets_fraction": [0.0] * 4}})
+    phase = config["trajectory"]["phase_offsets_fraction"]
+    assert phase == [0.0, 0.25, 0.5, 0.75]
+    gains = []
+    for t in np.linspace(0.0, period, 129):
+        positions = patrol_positions(float(t), config)
+        assert np.all(np.abs(positions[:, :2]) <= 500.0 + 1e-8)
+        np.testing.assert_allclose(positions[:, 2], 100.0, rtol=0, atol=1e-10)
+        base = patrol_positions(float(t), zero_phase)[0, :2]
+        x, y = base
+        rotations = np.array([[x, y], [-y, x], [-x, -y], [y, -x]])
+        np.testing.assert_allclose(patrol_positions(float(t), zero_phase)[:, :2],
+                                   rotations, rtol=0, atol=1e-8)
+        for uid in range(4):
+            shifted = patrol_positions(float(t + phase[uid] * period), zero_phase)
+            np.testing.assert_allclose(positions[uid], shifted[uid], rtol=0, atol=1e-8)
+        inverse_xy = np.array([[positions[0, 0], positions[0, 1]],
+                               [positions[1, 1], -positions[1, 0]],
+                               [-positions[2, 0], -positions[2, 1]],
+                               [-positions[3, 1], positions[3, 0]]])
+        assert np.all((inverse_xy[:, 0] >= 10.0 - 1e-8) & (inverse_xy[:, 0] <= 490.0 + 1e-8))
+        assert np.all((inverse_xy[:, 1] >= 40.0 - 1e-8) & (inverse_xy[:, 1] <= 460.0 + 1e-8))
+        for a in range(4):
+            for b in range(a):
+                assert np.linalg.norm(positions[a] - positions[b]) >= 50.0 - 1e-8
+        gains.append(channel_at(float(t), config)["gain"])
+    gains = np.stack(gains)
+    for a in range(4):
+        for b in range(a):
+            assert not np.allclose(gains[:, a], gains[:, b], rtol=1e-7, atol=0)
+    same_phase_gain = channel_at(0.173 * period, zero_phase)["gain"]
+    np.testing.assert_allclose(same_phase_gain, same_phase_gain[0], rtol=1e-12, atol=0)
+
+def _verify_serpentine_rounded_motion(config: dict, geometry: dict):
+    """在全部线弧接点和周期接缝两侧检查位置与速度连续、转弯半径和速度。"""
+    eps = 1e-4
+    segments = geometry["segments"]
+    np.testing.assert_allclose(segments[-1]["end_xy_m"], segments[0]["start_xy_m"], atol=1e-10)
+    for uid, phase_s in enumerate(geometry["phase_offsets_s"]):
+        for join_s in [0.0] + [segment["end_time_s"] for segment in segments]:
+            t = join_s - phase_s
+            before = patrol_positions(t - eps, config)[uid]
+            at = patrol_positions(t, config)[uid]
+            after = patrol_positions(t + eps, config)[uid]
+            left_velocity, right_velocity = (at - before) / eps, (after - at) / eps
+            assert np.isfinite(left_velocity).all() and np.isfinite(right_velocity).all()
+            assert np.linalg.norm(left_velocity) <= 10.0 + 1e-5
+            assert np.linalg.norm(right_velocity) <= 10.0 + 1e-5
+            assert np.linalg.norm(left_velocity - right_velocity) < 0.01
+    zero_phase = merge_config(config, {"trajectory": {"phase_offsets_fraction": [0.0] * 4}})
+    arcs = [segment for segment in segments if "radius_m" in segment]
+    assert len(arcs) == 12
+    for arc in arcs:
+        t = (arc["start_time_s"] + arc["end_time_s"]) / 2
+        position = patrol_positions(t, zero_phase)[0, :2]
+        velocity = (patrol_positions(t + eps, zero_phase)[0, :2]
+                    - patrol_positions(t - eps, zero_phase)[0, :2]) / (2 * eps)
+        radial = position - arc["center_xy_m"]
+        assert math.isclose(float(np.linalg.norm(radial)), 10.0, rel_tol=1e-9)
+        assert math.isclose(float(np.linalg.norm(velocity)), 5.0, rel_tol=1e-7)
+        assert abs(float(np.dot(radial, velocity))) < 1e-5
+
+def _verify_default_patrol_and_initial_samples() -> tuple[dict, dict]:
+    """验证新默认场景；独立于用于原21项检查的两机圆轨迹配置。"""
+    config = load_config()
+    assert config["trajectory"]["kind"] == "serpentine_equal"
+    geometry = patrol_geometry(config)
+    trajectory_report = _verify_serpentine_lengths_and_period(config, geometry)
+    _verify_serpentine_rotation_and_phase(config, geometry)
+    _verify_serpentine_rounded_motion(config, geometry)
+    release_report = _verify_absolute_initial_samples(config)
+    _verify_initial_capacity_and_small_data(config)
+    return trajectory_report, release_report
+
+
+def verify_implementation(config: dict) -> dict:
+    """依次执行小型 CPU 协议验证；失败抛 AssertionError，不作为实验准确率。"""
+    import torch
+    c = _verification_config(config)
+    torch.set_num_threads(c["training"]["torch_threads"])
+    model, _ = initialize_model(c)
+    data = prepare_data(c)
+    x, y = load_batch(data, data["clients"][0][:2], "cpu")
+    errors = _verify_split_gradients(model, x, y)
+    _verify_training_and_aggregation(model, data, c)
+    _verify_release_and_partitions(data, c)
+    profile = profile_splits(model, c)
+    remaining = np.full(2, c["uav"]["energy_cap_j"])
+    h = channel_at(data["start_s"], c)["gain"]
+    reference = reference_resources(c)
+    _verify_heterogeneous_resources(profile, h, c)
+    results = _verify_stage_costs_and_solver(profile, h, remaining, reference, c)
+    _verify_infeasibility_and_battery(profile, h, remaining, reference, c)
+    _verify_reference_recovery_and_ranking(profile, h, remaining, c)
+    _verify_budget_and_channel(c)
+    trajectory_report, release_report = _verify_default_patrol_and_initial_samples()
     return {"passed": True, "verification_config": c, "split_gradient_max_abs_errors": errors,
             "checks": ["five_split_gradients_and_updates", "exhaustive_split_ranking", "input_immutability", "tail_batch_step_sum",
                        "weighted_aggregation", "frozen_epoch_snapshot", "periodic_capture_release", "legacy_rate_release", "disjoint_partitions",
                        "separate_stage_maxima", "new_prefix_payload", "final_zero_download",
                        "convex_original_feasibility", "accepted_energy_monotonicity", "infeasible_rejection",
                        "binding_battery_constraint", "strict_reference_failure_and_explicit_rebuild", "budget_rounding",
-                       "per_uav_cycles_and_limits", "per_uav_phase_one", "legacy_and_grouped_profiles"],
-            "solver_cases": results}
+                       "per_uav_cycles_and_limits", "per_uav_phase_one", "legacy_and_grouped_profiles",
+                       "serpentine_equal_length_period_and_wrap", "serpentine_rotation_phase_and_quadrants",
+                       "serpentine_rounded_motion_continuity", "absolute_initial_500_snapshot_boundaries",
+                       "initial_capacity_and_small_synthetic_compatibility"],
+            "solver_cases": results, "trajectory_verification": trajectory_report,
+            "initial_sample_verification": release_report}
 
 
 def main() -> int:
@@ -1822,16 +2345,7 @@ def main() -> int:
         return 0
     if args.command in ("simulate", "train", "smoke"):
         if args.command == "smoke":
-            config = validate_config(merge_config(config, {"num_uavs": 4,
-                "data": {"kind": "synthetic", "image_size": 32, "synthetic_per_uav": 4,
-                         "synthetic_eval_size": 3, "samples_per_uav": None, "initial_fraction": 0.5,
-                         "fixed_epoch_counts": None},
-                "training": {"epochs": 4, "batch_size": 2, "epoch_step_size": 0.001,
-                             "checkpoint": None, "allow_random_init": True, "save_checkpoint": False},
-                "uav": {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
-                        "cycles_per_flop": 0.5, "energy_cap_j": 200000.0},
-                "budget": {"mode": "empirical"},
-                "optimization": {"max_iterations": 15, "split_objective": "reference_score"}}))
+            config = smoke_config(config)
         result = run_experiment(config, train=args.command != "simulate", output=args.output, label=args.command)
         report = {key: result["summary"][key] for key in ("status", "mode", "dataset_kind", "epochs_completed", "epochs_planned", "system_energy_j", "processed_samples")}
         report["failure_reason"] = result["summary"]["failure"]["reason"] if result["summary"]["failure"] else None

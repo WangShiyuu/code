@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
 import copy
-from functools import partial
+from functools import lru_cache, partial
 from itertools import product
 import time
 from typing import Any
@@ -21,6 +21,180 @@ from .config import BLOCKS, BLOCKS_PER_GROUP, SPLIT_POINTS, uav_parameter
 def patrol_radii(config: dict) -> np.ndarray:
     trajectory = config["trajectory"]
     return np.linspace(trajectory["radius_min_m"], trajectory["radius_max_m"], config["num_uavs"])
+
+
+def _patrol_line(start: np.ndarray, end: np.ndarray, speed: float,
+                 turn_speed: float, acceleration: float) -> dict:
+    """构造两端为转弯速度、可升至巡航速度的直线段及解析速度剖面。"""
+    length = float(np.linalg.norm(end - start))
+    ramp_distance = (speed ** 2 - turn_speed ** 2) / (2 * acceleration)
+    if length <= 0 or length + 1e-10 < 2 * ramp_distance:
+        raise ValueError("圆角后的每段直线必须为正且足以完成加速与减速")
+    ramp_time = (speed - turn_speed) / acceleration
+    cruise_distance = max(0.0, length - 2 * ramp_distance)
+    cruise_time = cruise_distance / speed
+    return {"kind": "line", "start_xy_m": start.tolist(), "end_xy_m": end.tolist(),
+            "length_m": length, "duration_s": 2 * ramp_time + cruise_time,
+            "direction_xy": ((end - start) / length).tolist(),
+            "start_speed_m_s": turn_speed, "peak_speed_m_s": speed,
+            "acceleration_m_s2": acceleration, "accel_distance_m": ramp_distance,
+            "cruise_distance_m": cruise_distance, "accel_time_s": ramp_time,
+            "cruise_time_s": cruise_time}
+
+
+@lru_cache(maxsize=32)
+def _serpentine_template(region_size: float, rows: int, edge: float, cross: float,
+                          radius: float, speed: float, turn_speed: float,
+                          acceleration: float) -> dict:
+    """按轨迹几何数值缓存 NE 模板；缓存仅内部只读，公开接口返回独立副本。"""
+    half = region_size / 2
+    ys = np.linspace(cross, half - cross, rows)
+    vertices = [np.array([edge, ys[0]])]
+    for index, y in enumerate(ys):
+        x = half - edge if index % 2 == 0 else edge
+        vertices.append(np.array([x, y]))
+        if index + 1 < rows:
+            vertices.append(np.array([x, ys[index + 1]]))
+    entries, exits, centers, signs = [], [], [], []
+    raw_length = 0.0
+    for index, vertex in enumerate(vertices):
+        previous, following = vertices[index - 1], vertices[(index + 1) % len(vertices)]
+        incoming, outgoing = vertex - previous, following - vertex
+        raw_length += float(np.linalg.norm(outgoing))
+        incoming /= np.linalg.norm(incoming)
+        outgoing /= np.linalg.norm(outgoing)
+        if not np.isclose(np.dot(incoming, outgoing), 0.0, atol=1e-12):
+            raise ValueError("蛇形闭合路线的相邻边必须垂直")
+        entries.append(vertex - radius * incoming)
+        exits.append(vertex + radius * outgoing)
+        centers.append(entries[-1] + radius * outgoing)
+        signs.append(float(incoming[0] * outgoing[1] - incoming[1] * outgoing[0]))
+    segments, elapsed = [], 0.0
+    # 周期起点为第一个圆角的出切点，默认 (20,40)，不是已切除的 (10,40)。
+    for index in range(len(vertices)):
+        corner = (index + 1) % len(vertices)
+        line = _patrol_line(exits[index], entries[corner], speed, turn_speed, acceleration)
+        arc = {"kind": "arc", "start_xy_m": entries[corner].tolist(),
+               "end_xy_m": exits[corner].tolist(), "center_xy_m": centers[corner].tolist(),
+               "radius_m": radius, "length_m": np.pi * radius / 2,
+               "duration_s": np.pi * radius / (2 * turn_speed),
+               "start_angle_rad": float(np.arctan2(*(entries[corner] - centers[corner])[::-1])),
+               "sweep_angle_rad": signs[corner] * np.pi / 2, "speed_m_s": turn_speed}
+        for segment in (line, arc):
+            segment["start_time_s"] = elapsed
+            elapsed += segment["duration_s"]
+            segment["end_time_s"] = elapsed
+            segments.append(segment)
+    return {"kind": "serpentine_equal", "segments": segments,
+            "vertices_xy_m": [v.tolist() for v in vertices],
+            "start_xy_m": exits[0].tolist(), "raw_length_m": raw_length,
+            "length_m": sum(s["length_m"] for s in segments), "period_s": elapsed,
+            "turn_count": len(vertices)}
+
+
+def _patrol_template(config: dict) -> dict:
+    """读取几何值组成缓存键；位置、服务器、时间和其他配置不会污染缓存。"""
+    t = config["trajectory"]
+    rows = t.get("scan_rows", 6)
+    if config["num_uavs"] != 4 or isinstance(rows, bool) or not isinstance(rows, (int, np.integer)) or rows < 2 or rows % 2:
+        raise ValueError("serpentine_equal 要求四架 UAV 且 scan_rows 为至少 2 的偶数")
+    values = [float(t.get(key, default)) for key, default in (
+        ("region_size_m", 1000.0), ("edge_margin_m", 10.0), ("cross_margin_m", 40.0),
+        ("turn_radius_m", 10.0), ("speed_m_s", 10.0), ("turn_speed_m_s", 5.0),
+        ("tangential_acceleration_m_s2", 2.0))]
+    size, edge, cross, radius, speed, turn_speed, acceleration = values
+    if not np.isfinite(values).all() or min(size, radius, speed, turn_speed, acceleration) <= 0 or min(edge, cross) < 0:
+        raise ValueError("蛇形区域、圆角、速度和加速度必须有限为正，边距必须有限非负")
+    if turn_speed > speed:
+        raise ValueError("turn_speed_m_s 不能大于 speed_m_s")
+    straight_lengths = [size / 2 - 2 * edge - 2 * radius,
+                        (size / 2 - 2 * cross) / (rows - 1) - 2 * radius,
+                        size / 2 - 2 * cross - 2 * radius]
+    if min(straight_lengths) <= 0:
+        raise ValueError("扫描区域及行距不足以容纳圆角")
+    return _serpentine_template(size, int(rows), edge, cross, radius, speed, turn_speed, acceleration)
+
+
+def _patrol_frame(config: dict) -> tuple[np.ndarray, np.ndarray]:
+    """返回与服务器坐标独立的区域中心，以及四机的周期时间相位比例。"""
+    t = config["trajectory"]
+    center = np.asarray(t.get("center_xy_m", [0.0, 0.0]), dtype=float)
+    phases = np.asarray(t.get("phase_offsets_fraction", [0.0, 0.25, 0.5, 0.75]), dtype=float)
+    if center.shape != (2,) or not np.isfinite(center).all():
+        raise ValueError("center_xy_m 必须是有限二维坐标")
+    if phases.shape != (4,) or not np.isfinite(phases).all() or np.any((phases < 0) | (phases >= 1)):
+        raise ValueError("phase_offsets_fraction 必须为四个 [0,1) 内的有限数")
+    return center, phases
+
+
+def patrol_geometry(config: dict) -> dict:
+    """返回独立轨迹几何；蛇形含模板线/弧段和共同周期，圆形含各机周长/周期。
+
+    蛇形 segments 为相对区域中心的 NE 模板，周期从默认 (20,40) 向右出发。
+    四机分别旋转 0/90/180/270 度，并按 phase_offsets_s 做时间错相。
+    长度/覆盖属于给定轨迹模型；圆形分支保留旧版给定轨迹的数值行为。
+    """
+    kind = config["trajectory"].get("kind", "circle")
+    if kind == "circle":
+        radii = patrol_radii(config)
+        lengths = 2 * np.pi * radii
+        return {"kind": kind, "segments": [], "radii_m": radii,
+                "length_m": lengths, "period_s": lengths / config["trajectory"]["speed_m_s"]}
+    if kind != "serpentine_equal":
+        raise ValueError(f"未知轨迹 kind: {kind}")
+    result = copy.deepcopy(_patrol_template(config))
+    center, phases = _patrol_frame(config)
+    result.update(center_xy_m=center.tolist(), rotation_rad=(np.arange(4) * np.pi / 2).tolist(),
+                  phase_offsets_s=(phases * result["period_s"]).tolist())
+    return result
+
+
+def _patrol_segment_position(segment: dict, time_s: float) -> np.ndarray:
+    """按线段的加减速或圆弧的匀速，解析求出段内位置。"""
+    elapsed = min(max(time_s, 0.0), segment["duration_s"])
+    if segment["kind"] == "arc":
+        angle = segment["start_angle_rad"] + segment["sweep_angle_rad"] * elapsed / segment["duration_s"]
+        return np.asarray(segment["center_xy_m"]) + segment["radius_m"] * np.array([np.cos(angle), np.sin(angle)])
+    v0, acceleration = segment["start_speed_m_s"], segment["acceleration_m_s2"]
+    if elapsed < segment["accel_time_s"]:
+        distance = v0 * elapsed + acceleration * elapsed ** 2 / 2
+    elif elapsed < segment["accel_time_s"] + segment["cruise_time_s"]:
+        distance = segment["accel_distance_m"] + segment["peak_speed_m_s"] * (elapsed - segment["accel_time_s"])
+    else:
+        remaining = segment["duration_s"] - elapsed
+        distance = segment["length_m"] - v0 * remaining - acceleration * remaining ** 2 / 2
+    return np.asarray(segment["start_xy_m"]) + distance * np.asarray(segment["direction_xy"])
+
+
+def patrol_positions(physical_s: float, config: dict) -> np.ndarray:
+    """返回标量物理时刻的 XYZ[N,3]；周期首尾及所有线/弧接点位置、速度连续。"""
+    physical_s = float(physical_s)
+    if not np.isfinite(physical_s):
+        raise ValueError("physical_s 必须有限")
+    n, t = config["num_uavs"], config["trajectory"]
+    kind = t.get("kind", "circle")
+    if kind == "circle":
+        radius = patrol_radii(config)
+        phase = 2 * np.pi * np.arange(n) / n
+        angle = phase + t["speed_m_s"] * physical_s / radius
+        return np.column_stack((radius * np.cos(angle) + t["center_offset_m"] * np.cos(phase),
+                                radius * np.sin(angle) + t["center_offset_m"] * np.sin(phase),
+                                np.full(n, t["altitude_m"])))
+    if kind != "serpentine_equal":
+        raise ValueError(f"未知轨迹 kind: {kind}")
+    template = _patrol_template(config)
+    center, phases = _patrol_frame(config)
+    segments, period = template["segments"], template["period_s"]
+    end_times = [segment["end_time_s"] for segment in segments]
+    xyz = np.empty((4, 3), dtype=float)
+    for uid, fraction in enumerate(phases):
+        local_time = (physical_s + fraction * period) % period
+        index = min(int(np.searchsorted(end_times, local_time, side="right")), len(segments) - 1)
+        xy = _patrol_segment_position(segments[index], local_time - segments[index]["start_time_s"])
+        x, y = xy
+        rotated = ((x, y), (-y, x), (-x, -y), (y, -x))[uid]
+        xyz[uid, :2], xyz[uid, 2] = np.asarray(rotated) + center, t["altitude_m"]
+    return xyz
 
 
 def grouped_profile(profile: dict) -> dict:
@@ -49,20 +223,24 @@ def grouped_profile(profile: dict) -> dict:
 
 
 def channel_at(physical_s: float, config: dict) -> dict:
-    """式(6)—(8)：给定偏心圆巡逻轨迹的确定性平均功率增益；无小尺度随机衰落。"""
-    n, t, c = config["num_uavs"], config["trajectory"], config["channel"]
-    radius = patrol_radii(config)
-    phase = 2 * np.pi * np.arange(n) / n
-    angle = phase + t["speed_m_s"] * physical_s / radius
-    xyz = np.column_stack((radius * np.cos(angle) + t["center_offset_m"] * np.cos(phase),
-                           radius * np.sin(angle) + t["center_offset_m"] * np.sin(phase),
-                           np.full(n, t["altitude_m"])))
+    """式(6)—(8)：在给定巡逻轨迹上计算确定性大尺度平均增益，无小尺度衰落。
+
+    轨迹位置连续；实验主循环仍在轮初冻结信道，不在整轮内部积分。
+    """
+    t, c = config["trajectory"], config["channel"]
+    xyz = patrol_positions(physical_s, config)
     delta = xyz - np.asarray(t["server_xyz_m"])
     distance = np.linalg.norm(delta, axis=1)
     elevation = np.degrees(np.arcsin(np.clip(delta[:, 2] / distance, -1, 1)))
     probability = 1 / (1 + c["los_a"] * np.exp(-c["los_b"] * (elevation - c["los_a"])))
     gain = probability * c["beta_l"] * distance ** (-c["alpha_l"]) + (1 - probability) * c["beta_n"] * distance ** (-c["alpha_n"])
-    return {"xyz_m": xyz, "distance_m": distance, "elevation_deg": elevation, "los_probability": probability, "gain": gain}
+    result = {"xyz_m": xyz, "distance_m": distance, "elevation_deg": elevation, "los_probability": probability, "gain": gain}
+    if t.get("kind", "circle") == "serpentine_equal":
+        template = _patrol_template(config)
+        _, phases = _patrol_frame(config)
+        result.update(trajectory_kind="serpentine_equal", patrol_period_s=template["period_s"],
+                      patrol_length_m=template["length_m"], phase_offsets_s=phases * template["period_s"])
+    return result
 
 
 def client_cycle_table(profile: dict, num_uavs: int) -> np.ndarray:

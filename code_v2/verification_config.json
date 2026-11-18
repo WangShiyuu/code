@@ -4,6 +4,7 @@
   },
   "data": {
     "root": "../../DataSet/CBCL StreetScenes",
-    "sample_interval_s": 13.574144486692015
+    "initial_samples_per_uav": 500,
+    "sample_interval_s": 13.426365795724466
   }
 }

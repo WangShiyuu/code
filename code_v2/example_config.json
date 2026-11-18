@@ -5,6 +5,7 @@
     "root": "../../DataSet/CBCL StreetScenes",
     "image_size": 64,
     "partition": "iid",
+    "initial_samples_per_uav": 500,
     "initial_fraction": 0.1,
     "rate_per_s": null,
     "patrol_epoch_s": 600.0,
@@ -12,6 +13,7 @@
     "sample_interval_s": null,
     "samples_per_capture": 1
   },
+  "trajectory": {"kind": "serpentine_equal"},
   "training": {
     "epochs": 120,
     "batch_size": 32,

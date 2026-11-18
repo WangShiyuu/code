@@ -47,7 +47,9 @@ def default_config(num_uavs: int = 4) -> dict:
         # root 放原始 Images.zip/Annotations.zip；区域图像在读取 batch 时裁剪。
         # val/test_fraction 按原始街景划分，避免同场景区域跨集合泄漏。
         # samples_per_uav=None 自动按训练池等量分配；整数则指定每机容量。
-        # 首轮使用既往巡逻样本，之后每经过一个采样间隔就入库一批新区域。
+        # 首轮默认每机已有 500 个巡逻样本；initial_samples_per_uav=None 才回退
+        # 到 initial_fraction。固定初始数超过真实容量时明确报错，不静默截断。
+        # 此后每经过一个采样间隔就入库一批新区域。
         # sample_interval_s=None 时按规划时段和剩余批数标定固定间隔。
         # patrol_epoch_s 是任务规划用的名义轮长，独立于资源求解的硬时限。
         # 显式设置 rate_per_s 可复现旧的恒速释放及启动等待。
@@ -55,7 +57,8 @@ def default_config(num_uavs: int = 4) -> dict:
         # fixed_epoch_counts=None 按物理时间释放；给列表则改为共同快照消融。
         "data": {"kind": "cbcl", "root": str(ROOT.parents[1] / "DataSet" / "CBCL StreetScenes"),
                  "image_size": 64, "val_fraction": 0.1, "test_fraction": 0.1,
-                 "samples_per_uav": None, "initial_fraction": 0.1, "rate_per_s": None,
+                 "samples_per_uav": None, "initial_samples_per_uav": 500,
+                 "initial_fraction": 0.1, "rate_per_s": None,
                  "patrol_epoch_s": 600.0, "patrol_collection_fraction": 0.95,
                  "sample_interval_s": None, "samples_per_capture": 1,
                  "synthetic_per_uav": 20, "synthetic_eval_size": 12,
@@ -72,9 +75,18 @@ def default_config(num_uavs: int = 4) -> dict:
         # epsilon 的含义是梯度范数平方目标上界，不能解释为分类错误率。
         "budget": {"mode": "empirical", "A_bar": 3.85, "C_bar": 0.0115,
                    "epsilon": 0.05, "effective_bound_verified": False},
-        # 轨迹坐标/半径单位 m，速度 m/s。偏心圆使 UAV 与服务器距离随时间变化。
+        # 默认四机在同一个正方形区域的四个旋转子区执行等长闭环蛇形扫描；
+        # 每个直角以固定半径圆角连接，转弯速度较低，直段按切向加速度升降速。
+        # 相位按周期时间比例指定；坐标/半径单位 m，速度 m/s，加速度 m/s²。
+        # circle 保留原偏心圆，旧 JSON 未指定 kind 时按旧圆字段迁移。
         # 轨迹是外部给定条件，连续资源优化不会改变飞行路线或速度。
-        "trajectory": {"server_xyz_m": [0.0, 0.0, 0.0], "altitude_m": 100.0,
+        "trajectory": {"kind": "serpentine_equal",
+                       "region_size_m": 1000.0, "center_xy_m": [0.0, 0.0],
+                       "scan_rows": 6, "edge_margin_m": 10.0, "cross_margin_m": 40.0,
+                       "turn_radius_m": 10.0, "turn_speed_m_s": 5.0,
+                       "tangential_acceleration_m_s2": 2.0,
+                       "phase_offsets_fraction": [0.0, 0.25, 0.5, 0.75],
+                       "server_xyz_m": [0.0, 0.0, 0.0], "altitude_m": 100.0,
                        "radius_min_m": 250.0, "radius_max_m": 450.0,
                        "center_offset_m": 150.0, "speed_m_s": 10.0},
         # beta_l/beta_n 是线性参考功率增益，alpha_l/alpha_n 是路径损耗指数。
@@ -118,6 +130,8 @@ def default_config(num_uavs: int = 4) -> dict:
     if num_uavs != 4:
         # 兼容只覆盖机器数量的旧配置，其未显式设置的设备参数沿用同质默认值。
         config["num_uavs"] = num_uavs
+        # 等分蛇形模板定义为四机；两机实现自检及旧任意机数场景继续使用圆轨迹。
+        config["trajectory"]["kind"] = "circle"
         config["uav"] = {"kappa": 1e-28, "compute_power_max_w": 0.3375, "power_max_w": 1.0,
                          "cycles_per_flop": 0.5, "energy_cap_j": 200000.0}
     return config
@@ -154,7 +168,11 @@ def training_budget(config: dict) -> dict:
 
 def require_positive(x, name, integer=False):
     """校验单个有限正数；integer=True 时同时要求整数。"""
-    if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) or x <= 0:
+    try:
+        finite = math.isfinite(x)
+    except (TypeError, OverflowError):
+        finite = False
+    if isinstance(x, bool) or not isinstance(x, (int, float)) or not finite or x <= 0:
         raise ValueError(f"{name} 必须为有限正数")
     if integer and not isinstance(x, int):
         raise ValueError(f"{name} 必须为整数")
@@ -192,6 +210,10 @@ def validate_data_config(c: dict):
         require_positive(d["rate_per_s"], "rate_per_s")
     d.setdefault("samples_per_capture", 1)
     d.setdefault("sample_interval_s", None)
+    # 直接验证缺少新字段的旧完整 Config 时保留原比例语义；新默认已给 500。
+    d.setdefault("initial_samples_per_uav", None)
+    if d["initial_samples_per_uav"] is not None:
+        require_positive(d["initial_samples_per_uav"], "initial_samples_per_uav", True)
     require_positive(d["samples_per_capture"], "samples_per_capture", True)
     if d["sample_interval_s"] is not None:
         require_positive(d["sample_interval_s"], "sample_interval_s")
@@ -199,7 +221,8 @@ def validate_data_config(c: dict):
         raise ValueError("旧版 rate_per_s 与巡逻采样间隔/批量不能同时指定")
     if d["samples_per_uav"] is not None:
         require_positive(d["samples_per_uav"], "samples_per_uav", True)
-    if not 0 < d["initial_fraction"] <= 1:
+    require_positive(d["initial_fraction"], "initial_fraction")
+    if d["initial_fraction"] > 1:
         raise ValueError("initial_fraction 必须属于 (0,1]")
     if min(d["val_fraction"], d["test_fraction"]) <= 0 or d["val_fraction"] + d["test_fraction"] >= 1:
         raise ValueError("验证/测试比例必须为正且和小于 1")
@@ -227,17 +250,76 @@ def validate_hardware_config(c: dict):
         raise ValueError("fixed_energy_j 必须非负")
 
 
+def require_finite_vector(values, length: int, name: str):
+    """校验有限坐标/相位向量；拒绝 bool、字符串及嵌套形状。"""
+    if not isinstance(values, (list, tuple, np.ndarray)) or np.shape(values) != (length,):
+        raise ValueError(f"{name} 必须为长度 {length} 的有限数值向量")
+    for value in values:
+        try:
+            finite = math.isfinite(value)
+        except (TypeError, OverflowError):
+            finite = False
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)) or not finite:
+            raise ValueError(f"{name} 必须为长度 {length} 的有限数值向量")
+
+
+def validate_serpentine_trajectory(t: dict, num_uavs: int):
+    """校验四机等长蛇形的圆角空间和每条直段达到巡航速度所需的加减速距离。"""
+    if num_uavs != 4:
+        raise ValueError("serpentine_equal 轨迹要求 num_uavs=4")
+    require_finite_vector(t["center_xy_m"], 2, "center_xy_m")
+    require_finite_vector(t["phase_offsets_fraction"], 4, "phase_offsets_fraction")
+    if any(value < 0 or value >= 1 for value in t["phase_offsets_fraction"]):
+        raise ValueError("phase_offsets_fraction 必须属于 [0,1)")
+    for key in ("region_size_m", "scan_rows", "turn_radius_m", "turn_speed_m_s",
+                "tangential_acceleration_m_s2"):
+        require_positive(t[key], key, key == "scan_rows")
+    if t["scan_rows"] < 2 or t["scan_rows"] % 2:
+        raise ValueError("scan_rows 必须为不小于 2 的正偶数，才能闭合蛇形回路")
+    for key in ("edge_margin_m", "cross_margin_m"):
+        value = t[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"{key} 必须为有限非负数")
+    if t["turn_speed_m_s"] > t["speed_m_s"]:
+        raise ValueError("turn_speed_m_s 不能大于 speed_m_s")
+    half = t["region_size_m"] / 2
+    spacing = (half - 2 * t["cross_margin_m"]) / (t["scan_rows"] - 1)
+    radius = t["turn_radius_m"]
+    straight_lengths = (half - 2 * t["edge_margin_m"] - 2 * radius,
+                        spacing - 2 * radius,
+                        half - 2 * t["cross_margin_m"] - 2 * radius)
+    if min(straight_lengths) <= 0:
+        raise ValueError("蛇形轨迹的圆角裁剪后直段必须为正；请调整区域、边距、行数或转弯半径")
+    speed, turn_speed = t["speed_m_s"], t["turn_speed_m_s"]
+    acceleration_distance = (0.0 if speed == turn_speed else
+                             (speed - turn_speed) * (speed + turn_speed) / t["tangential_acceleration_m_s2"])
+    if not math.isfinite(acceleration_distance) or min(straight_lengths) < acceleration_distance:
+        raise ValueError("蛇形直段不足以按 tangential_acceleration_m_s2 加速至巡航速度再减速至转弯速度")
+
+
 def validate_trajectory_config(c: dict):
-    """校验服务器坐标、飞行高度、速度与轨迹半径。"""
+    """校验轨迹种类、有限空间坐标、高度，以及对应路径的物理可行性。"""
     t = c["trajectory"]
-    if len(t["server_xyz_m"]) != 3 or not np.isfinite(t["server_xyz_m"]).all():
-        raise ValueError("server_xyz_m 必须为有限三维坐标")
-    if t["altitude_m"] <= t["server_xyz_m"][2]:
+    # 缺字段的旧完整 Config 使用旧圆轨迹，不隐式迁移成新蛇形。
+    kind = t.setdefault("kind", "circle")
+    if kind not in ("circle", "serpentine_equal"):
+        raise ValueError("trajectory.kind 必须为 circle/serpentine_equal")
+    require_finite_vector(t["server_xyz_m"], 3, "server_xyz_m")
+    altitude = t["altitude_m"]
+    if isinstance(altitude, bool) or not isinstance(altitude, (int, float)) or not math.isfinite(altitude):
+        raise ValueError("altitude_m 必须为有限数值")
+    if altitude <= t["server_xyz_m"][2]:
         raise ValueError("UAV 必须高于地面服务器")
-    for key in ("speed_m_s", "radius_min_m", "radius_max_m"):
-        require_positive(t[key], key)
-    if t["radius_max_m"] < t["radius_min_m"] or not math.isfinite(t["center_offset_m"]):
-        raise ValueError("轨迹半径/中心偏移不合法")
+    require_positive(t["speed_m_s"], "speed_m_s")
+    if kind == "serpentine_equal":
+        validate_serpentine_trajectory(t, c["num_uavs"])
+    else:
+        for key in ("radius_min_m", "radius_max_m"):
+            require_positive(t[key], key)
+        offset = t["center_offset_m"]
+        if (t["radius_max_m"] < t["radius_min_m"] or isinstance(offset, bool)
+                or not isinstance(offset, (int, float)) or not math.isfinite(offset)):
+            raise ValueError("轨迹半径/中心偏移不合法")
 
 
 def validate_optimization_config(c: dict):
@@ -289,11 +371,25 @@ def validate_config(c: dict) -> dict:
     return c
 
 
+def migrate_config_updates(updates: dict) -> dict:
+    """按输入字段识别旧模式；旧圆参数、旧初始比例均保留原语义。"""
+    result = copy.deepcopy(updates)
+    trajectory = result.get("trajectory", {})
+    old_circle_fields = ("radius_min_m", "radius_max_m", "center_offset_m")
+    if "kind" not in trajectory and any(key in trajectory for key in old_circle_fields):
+        trajectory["kind"] = "circle"
+    data = result.get("data", {})
+    if "initial_samples_per_uav" not in data and "initial_fraction" in data:
+        data["initial_samples_per_uav"] = None
+    return result
+
+
 def load_config(path: str | None = None, updates: dict | None = None) -> dict:
     """读取可选 JSON 和内存覆盖，返回验证后的 Config；相对路径相对 JSON。"""
     source = Path(path).resolve() if path else None
-    file_updates = json.loads(source.read_text(encoding="utf-8-sig")) if source else {}
-    num_uavs = (updates or {}).get("num_uavs", file_updates.get("num_uavs", 4))
+    file_updates = migrate_config_updates(json.loads(source.read_text(encoding="utf-8-sig"))) if source else {}
+    memory_updates = migrate_config_updates(updates or {})
+    num_uavs = memory_updates.get("num_uavs", file_updates.get("num_uavs", 4))
     c = default_config(num_uavs)
     if path:
         c = merge_config(c, file_updates)
@@ -303,7 +399,7 @@ def load_config(path: str | None = None, updates: dict | None = None) -> dict:
                 c[group][key] = str(p if p.is_absolute() else source.parent / p)
         p = Path(c["output_root"]).expanduser()
         c["output_root"] = str(p if p.is_absolute() else source.parent / p)
-    return validate_config(merge_config(c, updates or {}))
+    return validate_config(merge_config(c, memory_updates))
 
 
 def json_value(value: Any) -> Any:
@@ -332,6 +428,7 @@ def smoke_config(config: dict):
     return validate_config(merge_config(config, {"num_uavs": 4,
         "data": {"kind": "synthetic", "image_size": 32, "synthetic_per_uav": 4,
                  "synthetic_eval_size": 3, "samples_per_uav": None, "initial_fraction": 0.5,
+                 "initial_samples_per_uav": None,
                  "fixed_epoch_counts": None},
         "training": {"epochs": 4, "batch_size": 2, "epoch_step_size": 0.001,
                      "checkpoint": None, "allow_random_init": True, "save_checkpoint": False},
