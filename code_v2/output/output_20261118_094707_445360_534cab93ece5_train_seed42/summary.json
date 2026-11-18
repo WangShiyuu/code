@@ -1,0 +1,400 @@
+{
+  "status": "completed",
+  "completed": true,
+  "mode": "training",
+  "dataset_kind": "cbcl",
+  "strategy": "dynamic_opt",
+  "epochs_completed": 120,
+  "epochs_planned": 120,
+  "aggregations_completed": 60,
+  "reference_recovery": "rebuild",
+  "budget": {
+    "epochs": 120,
+    "aggregations": 60,
+    "conditional_epochs": 100,
+    "mode": "empirical",
+    "effective_bound_verified": false
+  },
+  "start_s": 0.0,
+  "finish_s": 72000.00254508422,
+  "training_duration_s": 72000.00254508422,
+  "variable_energy_j": 54894.83017096378,
+  "system_energy_j": 54894.83017096378,
+  "uav_energy_j": [
+    310.37324468515766,
+    285.38775381665045,
+    751.922640371878,
+    1635.1392600189465
+  ],
+  "server_energy_j": 51912.00727207116,
+  "remaining_j": [
+    11689.62675531484,
+    15714.612246183337,
+    19248.077359628114,
+    22364.86073998106
+  ],
+  "processed_samples": 1512372,
+  "distinct_training_samples": 22208,
+  "best_validation_epoch": 104,
+  "best_validation": {
+    "loss": 0.299776341125602,
+    "accuracy": 0.8898582333696837,
+    "macro_f1": 0.8618663651672028,
+    "confusion": [
+      [
+        15,
+        0,
+        2,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        427,
+        3,
+        0,
+        0,
+        3,
+        6,
+        9,
+        61
+      ],
+      [
+        0,
+        1,
+        545,
+        2,
+        6,
+        3,
+        0,
+        1,
+        1
+      ],
+      [
+        2,
+        0,
+        2,
+        156,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        8,
+        1,
+        290,
+        41,
+        2,
+        0,
+        2
+      ],
+      [
+        1,
+        1,
+        0,
+        1,
+        30,
+        331,
+        1,
+        2,
+        1
+      ],
+      [
+        0,
+        3,
+        0,
+        0,
+        1,
+        3,
+        237,
+        0,
+        7
+      ],
+      [
+        0,
+        24,
+        0,
+        0,
+        0,
+        1,
+        0,
+        35,
+        5
+      ],
+      [
+        0,
+        56,
+        0,
+        0,
+        1,
+        0,
+        5,
+        0,
+        412
+      ]
+    ],
+    "samples": 2751
+  },
+  "last_aggregation_epoch": 120,
+  "initialization": {
+    "kind": "local_checkpoint",
+    "path": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\resnet18-f37072fd.pth",
+    "sha256": "f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec",
+    "head_reinitialized": true,
+    "legacy_bn_counters_initialized": [
+      "bn1.num_batches_tracked",
+      "layer1.0.bn1.num_batches_tracked",
+      "layer1.0.bn2.num_batches_tracked",
+      "layer1.1.bn1.num_batches_tracked",
+      "layer1.1.bn2.num_batches_tracked",
+      "layer2.0.bn1.num_batches_tracked",
+      "layer2.0.bn2.num_batches_tracked",
+      "layer2.0.downsample.1.num_batches_tracked",
+      "layer2.1.bn1.num_batches_tracked",
+      "layer2.1.bn2.num_batches_tracked",
+      "layer3.0.bn1.num_batches_tracked",
+      "layer3.0.bn2.num_batches_tracked",
+      "layer3.0.downsample.1.num_batches_tracked",
+      "layer3.1.bn1.num_batches_tracked",
+      "layer3.1.bn2.num_batches_tracked",
+      "layer4.0.bn1.num_batches_tracked",
+      "layer4.0.bn2.num_batches_tracked",
+      "layer4.0.downsample.1.num_batches_tracked",
+      "layer4.1.bn1.num_batches_tracked",
+      "layer4.1.bn2.num_batches_tracked"
+    ]
+  },
+  "data_fingerprint": "2f5ca8efe45618e6e751fc21d4e21319ced1496d67b6bf84bccf236bd18bc51a",
+  "hardware_profile_measured": false,
+  "failure": null,
+  "wall_s": 37692.41097920001,
+  "code_sha256": "a5b1e0e5bfd956713f9c9150ac2acf7a78c40f3b85ef6f5cb4b63cfb72f060d0",
+  "code_version": {
+    "git_commit": "534cab93ece580b90d5a0291637e6127cb74fade",
+    "git_dirty": false,
+    "source_sha256": "a5b1e0e5bfd956713f9c9150ac2acf7a78c40f3b85ef6f5cb4b63cfb72f060d0"
+  },
+  "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。",
+  "last_aggregated_test": {
+    "loss": 0.2769956304408886,
+    "accuracy": 0.9033333333333333,
+    "macro_f1": 0.8582467961313577,
+    "confusion": [
+      [
+        12,
+        0,
+        3,
+        2,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        443,
+        1,
+        0,
+        1,
+        5,
+        3,
+        8,
+        44
+      ],
+      [
+        0,
+        3,
+        548,
+        0,
+        6,
+        1,
+        0,
+        2,
+        0
+      ],
+      [
+        1,
+        2,
+        4,
+        149,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        1,
+        1,
+        300,
+        35,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        2,
+        1,
+        36,
+        327,
+        1,
+        1,
+        2
+      ],
+      [
+        0,
+        3,
+        0,
+        0,
+        0,
+        0,
+        240,
+        0,
+        10
+      ],
+      [
+        0,
+        18,
+        1,
+        0,
+        0,
+        0,
+        0,
+        23,
+        2
+      ],
+      [
+        0,
+        36,
+        1,
+        0,
+        0,
+        3,
+        15,
+        0,
+        397
+      ]
+    ],
+    "samples": 2700
+  },
+  "best_validation_model_test": {
+    "loss": 0.2845714226475468,
+    "accuracy": 0.9025925925925926,
+    "macro_f1": 0.8508200004717598,
+    "confusion": [
+      [
+        11,
+        0,
+        3,
+        3,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        447,
+        1,
+        0,
+        0,
+        4,
+        3,
+        8,
+        42
+      ],
+      [
+        0,
+        4,
+        549,
+        0,
+        4,
+        0,
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        3,
+        5,
+        147,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        2,
+        1,
+        295,
+        39,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        4,
+        1,
+        29,
+        332,
+        1,
+        1,
+        2
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0,
+        240,
+        0,
+        9
+      ],
+      [
+        0,
+        19,
+        1,
+        0,
+        0,
+        0,
+        0,
+        22,
+        2
+      ],
+      [
+        0,
+        43,
+        1,
+        0,
+        0,
+        3,
+        11,
+        0,
+        394
+      ]
+    ],
+    "samples": 2700
+  }
+}
