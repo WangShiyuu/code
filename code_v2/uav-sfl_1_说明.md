@@ -52,6 +52,13 @@ $sflPython = 'E:\Work1SFL\artifacts\archive_verification_env\Scripts\python.exe'
 
 其他命令仍为 `prepare`、`profile`、`simulate` 和 `train`，沿用原 JSON 配置及 `--config`、`--output`、`--checkpoint`、`--allow-random-init` 参数。默认结果目录仍为同目录 `output`，每次运行新建子目录。
 
+在 RTX 3080 上，使用 [README 的 CUDA 环境](README.md#在-rtx-3080-上运行)设置 `$sflPython`。
+
+```powershell
+& $sflPython -X utf8 -B .\uav-sfl_1.py smoke --device cuda
+& $sflPython -X utf8 -B .\uav-sfl_1.py train --device cuda --checkpoint .\resnet18-f37072fd.pth
+```
+
 文件名按要求包含连字符，适合以上命令行启动；它不能直接写成 Python 的 `import uav-sfl_1`。需要从其他 Python 代码加载时可使用 `importlib.util.spec_from_file_location`；Windows 并行搜索建议使用命令行入口。
 
 ## 验证结果

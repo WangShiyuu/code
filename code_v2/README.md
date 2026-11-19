@@ -53,6 +53,32 @@ $sflPython = (Resolve-Path '.\.venv\Scripts\python.exe').Path
 & $sflPython -X utf8 -B .\uav_sfl.py train --checkpoint .\resnet18-f37072fd.pth
 ```
 
+### 在 RTX 3080 上运行
+
+在装有 NVIDIA 驱动的 Windows 电脑上，从 `code_v2` 目录创建 CUDA 环境。使用 Python
+3.12 或 3.13 时，可安装 [PyTorch 2.11 的 CUDA 12.8 版](https://pytorch.org/get-started/previous-versions/#v2110)。
+其他组合可按驱动和 Python 版本选取。[PyTorch 安装页](https://docs.pytorch.org/get-started/)
+
+```powershell
+nvidia-smi
+python -m venv ..\..\.venv-gpu
+$sflPython = (Resolve-Path '..\..\.venv-gpu\Scripts\python.exe').Path
+& $sflPython -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+& $sflPython -m pip install -r .\requirements.txt
+& $sflPython -X utf8 -B .\uav_sfl.py smoke --device cuda
+```
+
+短测完成并显示 `cuda:0` 后，再启动正式训练。
+
+```powershell
+& $sflPython -X utf8 -B .\uav_sfl.py train --device cuda --checkpoint .\resnet18-f37072fd.pth
+```
+
+`--device cuda` 要求使用 CUDA，环境不可用时会在训练前报错。`--device cuda:0` 指定
+第一张可见显卡。`--device auto` 优先使用 CUDA，在 CUDA 不可用时选择 CPU。
+也可以在 JSON 中设置 `"training": {"device": "cuda"}`，显式命令行参数优先。
+运行时可从终端、`config.json` 和 `run.json` 核对实际设备。切点搜索、资源求解和图片解码仍在 CPU 上执行。
+
 仅计算资源配置、物理时延和能耗时，选择：
 
 ```powershell
@@ -81,7 +107,7 @@ $sflPython = (Resolve-Path '.\.venv\Scripts\python.exe').Path
 
 所有参数、数据准备、环境、优化、ResNet18、训练和检查均在 **`uav_sfl.py` 一个代码文件**。没有项目内部跨文件依赖，也不导入 v0/v1。实现依据为 [Notion 动态UAV-SFL](https://app.notion.com/p/3b5427f94a0b8040a213d5d9b277c8df)，源页面编辑时间为北京时间 **2026-10-30 02:45:37**，完整读取快照保存在 `notion_source.md`。
 
-默认使用 CPU。若选择 GPU，在 `code_v2\.venv` 中安装与设备匹配的 PyTorch，并在 `training.device` 中指定设备。
+默认使用 CPU。
 
 ## 可选参数覆盖
 

@@ -5,6 +5,7 @@ import copy
 import json
 import math
 from pathlib import Path
+import re
 from typing import Any
 
 import numpy as np
@@ -178,6 +179,13 @@ def require_positive(x, name, integer=False):
         raise ValueError(f"{name} 必须为整数")
 
 
+def validate_training_device(device: str) -> None:
+    """校验设备字符串格式，具体设备由运行环境检查。"""
+    if (not isinstance(device, str) or re.fullmatch(r"[a-z][a-z0-9_]*(?::(?:0|[1-9][0-9]*))?", device) is None
+            or device.startswith("auto:")):
+        raise ValueError(f"无效的 training.device {device!r}；请使用 auto、cpu、cuda 或 cuda:N")
+
+
 def validate_training_config(c: dict):
     """校验机器数量、种子和训练预算，并更新副本中的实际轮数。"""
     for key in ("num_uavs",):
@@ -186,12 +194,45 @@ def validate_training_config(c: dict):
         raise ValueError("seed 必须为非负整数")
     for key in ("epochs", "batch_size", "torch_threads"):
         require_positive(c["training"][key], key, True)
+    validate_training_device(c["training"].setdefault("device", "cpu"))
     if c["training"]["aggregation_period"] != 2 or c["training"]["epochs"] % 2:
         raise ValueError("本研究 K=2，epochs 必须是正偶数")
     require_positive(c["training"]["epoch_step_size"], "epoch_step_size")
     if c["budget"]["mode"] not in ("empirical", "theoretical"):
         raise ValueError("budget.mode 必须是 empirical/theoretical")
     c["training"]["epochs"] = training_budget(c)["epochs"]
+
+
+def resolve_training_device(device: str) -> str:
+    """在执行计算前解析本机设备，固定 CUDA 设备编号。"""
+    validate_training_device(device)
+    if device == "cpu":
+        return device
+
+    try:
+        import torch
+    except ModuleNotFoundError as exc:
+        if exc.name != "torch":
+            raise
+        raise RuntimeError("当前 Python 环境未安装 PyTorch，请使用安装了 PyTorch 的环境运行。") from exc
+
+    if device not in ("auto", "cuda") and not device.startswith("cuda:"):
+        try:
+            requested = torch.device(device)
+        except RuntimeError as exc:
+            raise ValueError(f"当前 PyTorch 无法识别 training.device {device!r}") from exc
+        return "cpu" if requested.type == "cpu" else str(requested)
+    if not torch.cuda.is_available():
+        if device == "auto":
+            return "cpu"
+        raise RuntimeError(f"请求了 {device}，但当前 PyTorch ({torch.__version__}) 无法使用 CUDA。"
+                           "请检查 GPU 驱动和 PyTorch 构建，或使用 --device cpu / --device auto。")
+    count = torch.cuda.device_count()
+    index = int(device.removeprefix("cuda:")) if device.startswith("cuda:") else torch.cuda.current_device()
+    if not 0 <= index < count:
+        raise ValueError(f"请求了 {device}，但当前 PyTorch 只检测到 {count} 个 CUDA 设备。"
+                         "请使用有效编号，或使用 --device auto。")
+    return f"cuda:{index}"
 
 
 def validate_data_config(c: dict):

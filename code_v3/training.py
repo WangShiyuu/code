@@ -20,6 +20,7 @@ from .config import (
     STD,
     json_value,
     require_positive,
+    resolve_training_device,
     uav_parameter,
     validate_split_point,
 )
@@ -363,6 +364,7 @@ def initialize_model(config: dict, require_pretrained: bool = False) -> tuple[di
     兼容官方 state_dict。先构造局部随机初值，再按需恢复 checkpoint，最后
     移至设备。正式训练缺少 checkpoint 且未允许随机初始化时仍报错。
     """
+    device = resolve_training_device(config["training"].get("device", "cpu"))
     params, buffers = initialize_resnet_tensors(config["seed"])
     provenance = {"kind": "random_diagnostic", "seed": config["seed"], "head_reinitialized": True}
     path = config["training"]["checkpoint"]
@@ -370,9 +372,13 @@ def initialize_model(config: dict, require_pretrained: bool = False) -> tuple[di
         provenance = restore_model_checkpoint(params, buffers, path)
     elif require_pretrained and not config["training"]["allow_random_init"]:
         raise ValueError("正式训练需要 training.checkpoint（标准 ResNet18 state_dict 或本程序模型）；诊断可显式 --allow-random-init")
-    device = config["training"]["device"]
     return {"params": {k: v.to(device).detach().requires_grad_(True) for k, v in params.items()},
             "buffers": {k: v.to(device) for k, v in buffers.items()}}, provenance
+
+
+def model_device(model: dict) -> str:
+    """返回模型所在设备，供后续输入张量使用。"""
+    return str(next(iter(model["params"].values())).device)
 
 
 def frozen_bn(x: Any, model: dict, name: str) -> Any:
@@ -468,7 +474,7 @@ def sgd_step(model: dict, gradients: dict, step: float) -> dict:
 def train_client_batch(model: dict, data: dict, batch: list[int], split: int,
                        epoch_count: int, config: dict) -> tuple[dict, dict, float]:
     """读取一个 batch，计算分割梯度，并按 batch 在冻结快照中的占比执行 SGD。"""
-    x, y = load_batch(data, batch, config["training"]["device"])
+    x, y = load_batch(data, batch, model_device(model))
     gradients, metrics = split_gradients(model, x, y, split)
     # 每个样本对本轮累计步长的权重相同；例如 D=3、batch_size=2 时，
     # 两批使用 2*eta/3 和 eta/3，数据增长不会自动扩大整轮累计步长。
@@ -530,10 +536,11 @@ def evaluate_model(model: dict, data: dict, indices: list[int], config: dict) ->
     from torch.nn import functional as F
     confusion = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
     loss_sum = 0.0
+    device = model_device(model)
     with torch.no_grad():
         for offset in range(0, len(indices), config["training"]["batch_size"]):
             ids = indices[offset:offset + config["training"]["batch_size"]]
-            x, y = load_batch(data, ids, config["training"]["device"])
+            x, y = load_batch(data, ids, device)
             logits = forward_suffix(model, forward_prefix(model, x, 0), 0)
             batch_loss = F.cross_entropy(logits, y, reduction="sum")
             if not bool(torch.isfinite(batch_loss)):
@@ -599,7 +606,7 @@ def profile_splits(model: dict, config: dict) -> dict:
     未支持算子；结果并非硬件实测，metadata 始终记录此限制。
     """
     import torch
-    size, device = config["data"]["image_size"], config["training"]["device"]
+    size, device = config["data"]["image_size"], model_device(model)
     x = torch.linspace(-1, 1, 3 * size * size, device=device).reshape(1, 3, size, size)
     y = torch.zeros(1, dtype=torch.long, device=device)
     rows = [profile_split_point(model, config, x, y, split) for split in SPLIT_POINTS]

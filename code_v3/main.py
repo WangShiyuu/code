@@ -25,8 +25,8 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from code_v3.config import (
-    ROOT, json_value, load_config, save_json, smoke_config, training_budget,
-    uav_parameter, validate_config,
+    ROOT, json_value, load_config, resolve_training_device, save_json, smoke_config,
+    training_budget, uav_parameter, validate_config,
 )
 from code_v3.optimization import (
     channel_at, client_cycle_table, grouped_profile, reference_resources,
@@ -78,7 +78,8 @@ def make_output_directory(config: dict, label: str, version: dict | None = None)
 
 
 @contextmanager
-def experiment_output(config: dict, label: str, output: str | Path | None = None):
+def experiment_output(config: dict, label: str, output: str | Path | None = None,
+                      *, requested_device: str | None = None):
     """为各入口保存参数、版本和运行状态，独占结果目录。"""
     sources = read_source_files()
     version = code_version(sources)
@@ -89,6 +90,8 @@ def experiment_output(config: dict, label: str, output: str | Path | None = None
     now = lambda: datetime.now(timezone(timedelta(hours=8))).isoformat()
     metadata = {"mode": label, "status": "running", "started_at": now(), "finished_at": None,
                 "output_dir": str(directory.resolve()), "code_version": version}
+    if requested_device is not None:
+        metadata.update(training_device_requested=requested_device, training_device=config["training"]["device"])
     # 排他创建运行记录，防止两个显式 --output 同时写入同一目录。
     with (directory / "run.json").open("x", encoding="utf-8") as stream:
         json.dump(metadata, stream, ensure_ascii=False, indent=2)
@@ -135,7 +138,11 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
     单轮可行不等于任务必然完成，调用者应先检查 summary['completed']。
     """
     config = validate_config(config)
-    with experiment_output(config, label or ("train" if train else "simulate"), output) as (directory, metadata):
+    requested_device = config["training"]["device"]
+    config["training"]["device"] = resolve_training_device(requested_device)
+    print(f"{'Training' if train else 'Model'} device: {config['training']['device']}", file=sys.stderr, flush=True)
+    with experiment_output(config, label or ("train" if train else "simulate"), output,
+                           requested_device=requested_device) as (directory, metadata):
         result = execute_experiment(config, train, data, profile, directory, metadata["code_version"])
         summary = result["summary"]
         metadata.update(status=summary["status"], epochs_completed=summary["epochs_completed"],
@@ -295,6 +302,7 @@ def build_argument_parser():
     parser.add_argument("--config", help="JSON 局部参数覆盖文件")
     parser.add_argument("--output", help="本次运行的新目录；不得覆盖已有 config.json")
     parser.add_argument("--checkpoint", help="ResNet18 本地预训练参数路径")
+    parser.add_argument("--device", help="模型设备 auto、cpu、cuda 或 cuda:N（覆盖 training.device）")
     parser.add_argument("--allow-random-init", action="store_true", help="显式允许随机初始化，仅用于诊断/指定的消融")
     return parser
 
@@ -302,12 +310,14 @@ def build_argument_parser():
 def load_cli_config(args: argparse.Namespace):
     """读取 JSON 和显式命令行覆盖，保持原参数优先级。"""
     updates = {}
-    if args.checkpoint or args.allow_random_init:
+    if args.checkpoint or args.allow_random_init or args.device is not None:
         updates["training"] = {}
         if args.checkpoint:
             updates["training"]["checkpoint"] = str(Path(args.checkpoint).resolve())
         if args.allow_random_init:
             updates["training"]["allow_random_init"] = True
+        if args.device is not None:
+            updates["training"]["device"] = args.device
     return load_config(args.config, updates)
 
 
@@ -324,7 +334,12 @@ def run_experiment_command(args: argparse.Namespace, config: dict):
 
 def run_preparation_command(args: argparse.Namespace, config: dict):
     """执行并存档 check、prepare 或 profile 的结果。"""
-    with experiment_output(config, args.command, args.output) as (output, metadata):
+    requested_device = None
+    if args.command == "profile":
+        requested_device = config["training"]["device"]
+        config["training"]["device"] = resolve_training_device(requested_device)
+        print(f"Model device: {config['training']['device']}", file=sys.stderr, flush=True)
+    with experiment_output(config, args.command, args.output, requested_device=requested_device) as (output, metadata):
         if args.command == "check":
             report = verify_implementation(config)
             save_json(output / "verification.json", report)
@@ -345,7 +360,10 @@ def run_preparation_command(args: argparse.Namespace, config: dict):
 
 def main() -> int:
     """命令行入口：解析参数、加载配置，再分派到相应的小函数。"""
-    args = build_argument_parser().parse_args()
+    parser = build_argument_parser()
+    args = parser.parse_args()
+    if args.device is not None and args.command in ("check", "prepare"):
+        parser.error("--device 用于 train、smoke、simulate、profile 或 config")
     config = load_cli_config(args)
     if args.command == "config":
         print(json.dumps({"config": config, "training_budget": training_budget(config)}, ensure_ascii=False, indent=2))

@@ -54,6 +54,26 @@ $sflPython = 'E:\Work1SFL\artifacts\archive_verification_env\Scripts\python.exe'
 
 修改默认参数可编辑 `config.py` 中的 `default_config()`。单次实验也可以用 `--config <JSON 路径>` 覆盖部分参数。新 Python 环境可安装 `numpy>=1.26`、`Pillow>=10`、`torch>=2.5`、`cvxpy>=1.6` 和 `clarabel>=0.10`。
 
+### 在 RTX 3080 上运行
+
+按 [code_v2 的 CUDA 环境步骤](../code_v2/README.md#在-rtx-3080-上运行)安装依赖，然后在
+`code_v3` 目录运行下列命令。两版可以使用同一个 CUDA 环境。
+
+```powershell
+$sflPython = (Resolve-Path '..\..\.venv-gpu\Scripts\python.exe').Path
+& $sflPython -X utf8 -B .\main.py smoke --device cuda
+```
+
+短测完成并显示 `cuda:0` 后，再启动正式训练。
+
+```powershell
+& $sflPython -X utf8 -B .\main.py train --device cuda --checkpoint '..\code_v2\resnet18-f37072fd.pth'
+```
+
+默认设备为 CPU。命令行的 `--device` 优先于 JSON 中的 `training.device`。
+`cuda` 要求 CUDA 可用，`cuda:0` 指定第一张可见显卡，`auto` 优先使用 CUDA。
+实际设备可在终端、`config.json` 和 `run.json` 中查看。切点搜索、资源求解和图片解码仍在 CPU 上执行。
+
 ## 独立调用
 
 从 `E:\Work1SFL\code` 启动 Python 后，可按需导入三个模块。以下示例让第一架 UAV 在切点 4 上执行一轮本地训练。

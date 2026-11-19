@@ -85,6 +85,7 @@ import importlib.metadata
 import json
 import math
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -263,6 +264,10 @@ def validate_training_config(c: dict):
         raise ValueError("seed 必须为非负整数")
     for key in ("epochs", "batch_size", "torch_threads"):
         require_positive(c["training"][key], key, True)
+    device = c["training"]["device"]
+    if (not isinstance(device, str) or device.startswith("auto:")
+            or re.fullmatch(r"[a-z][a-z0-9_]*(?::(?:0|[1-9][0-9]*))?", device) is None):
+        raise ValueError("training.device 必须是有效设备字符串，例如 auto、cpu、cuda 或 cuda:0")
     if c["training"]["aggregation_period"] != 2 or c["training"]["epochs"] % 2:
         raise ValueError("本研究 K=2，epochs 必须是正偶数")
     require_positive(c["training"]["epoch_step_size"], "epoch_step_size")
@@ -475,6 +480,32 @@ def load_config(path: str | None = None, updates: dict | None = None) -> dict:
         p = Path(c["output_root"]).expanduser()
         c["output_root"] = str(p if p.is_absolute() else source.parent / p)
     return validate_config(merge_config(c, memory_updates))
+
+
+def resolve_training_device(requested: str) -> str:
+    """选择本机张量设备并解析实际 CUDA 索引。"""
+    if requested == "cpu":
+        return requested
+    try:
+        import torch
+    except ModuleNotFoundError as exc:
+        if exc.name != "torch":
+            raise
+        raise RuntimeError("当前 Python 环境未安装 PyTorch，请使用安装了 PyTorch 的环境运行。") from exc
+
+    if requested not in ("auto", "cuda") and not requested.startswith("cuda:"):
+        device = torch.device(requested)
+        return "cpu" if device.type == "cpu" else str(device)
+    if not torch.cuda.is_available():
+        if requested == "auto":
+            return "cpu"
+        raise RuntimeError(f"请求的设备 {requested} 不可用。请用 nvidia-smi 检查显卡和驱动，"
+                           "并确认当前 Python 已安装支持 CUDA 的 PyTorch。也可指定 --device auto 或 cpu。")
+    count = torch.cuda.device_count()
+    index = int(requested.split(":", 1)[1]) if requested.startswith("cuda:") else torch.cuda.current_device()
+    if not 0 <= index < count:
+        raise ValueError(f"请求的设备 {requested} 不可用。当前可见 CUDA 设备数为 {count}。")
+    return f"cuda:{index}"
 
 
 def json_value(value: Any) -> Any:
@@ -835,6 +866,7 @@ def initialize_model(config: dict, require_pretrained: bool = False) -> tuple[di
     兼容官方 state_dict。先构造局部随机初值，再按需恢复 checkpoint，最后
     移至设备。正式训练缺少 checkpoint 且未允许随机初始化时仍报错。
     """
+    device = resolve_training_device(str(config["training"]["device"]))
     params, buffers = initialize_resnet_tensors(config["seed"])
     provenance = {"kind": "random_diagnostic", "seed": config["seed"], "head_reinitialized": True}
     path = config["training"]["checkpoint"]
@@ -842,7 +874,6 @@ def initialize_model(config: dict, require_pretrained: bool = False) -> tuple[di
         provenance = restore_model_checkpoint(params, buffers, path)
     elif require_pretrained and not config["training"]["allow_random_init"]:
         raise ValueError("正式训练需要 training.checkpoint（标准 ResNet18 state_dict 或本程序模型）；诊断可显式 --allow-random-init")
-    device = config["training"]["device"]
     return {"params": {k: v.to(device).detach().requires_grad_(True) for k, v in params.items()},
             "buffers": {k: v.to(device) for k, v in buffers.items()}}, provenance
 
@@ -946,7 +977,7 @@ def sgd_step(model: dict, gradients: dict, step: float) -> dict:
 def train_client_batch(model: dict, data: dict, batch: list[int], split: int,
                        epoch_count: int, config: dict) -> tuple[dict, dict, float]:
     """读取一个 batch，计算分割梯度，并按 batch 在冻结快照中的占比执行 SGD。"""
-    x, y = load_batch(data, batch, config["training"]["device"])
+    x, y = load_batch(data, batch, str(model["params"]["conv1.weight"].device))
     gradients, metrics = split_gradients(model, x, y, split)
     # 每个样本对本轮累计步长的权重相同；例如 D=3、batch_size=2 时，
     # 两批使用 2*eta/3 和 eta/3，数据增长不会自动扩大整轮累计步长。
@@ -1008,10 +1039,11 @@ def evaluate_model(model: dict, data: dict, indices: list[int], config: dict) ->
     from torch.nn import functional as F
     confusion = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
     loss_sum = 0.0
+    device = str(model["params"]["conv1.weight"].device)
     with torch.no_grad():
         for offset in range(0, len(indices), config["training"]["batch_size"]):
             ids = indices[offset:offset + config["training"]["batch_size"]]
-            x, y = load_batch(data, ids, config["training"]["device"])
+            x, y = load_batch(data, ids, device)
             logits = forward_suffix(model, forward_prefix(model, x, 0), 0)
             batch_loss = F.cross_entropy(logits, y, reduction="sum")
             if not bool(torch.isfinite(batch_loss)):
@@ -1073,7 +1105,7 @@ def profile_splits(model: dict, config: dict) -> dict:
     未支持算子；结果并非硬件实测，metadata 始终记录此限制。
     """
     import torch
-    size, device = config["data"]["image_size"], config["training"]["device"]
+    size, device = config["data"]["image_size"], model["params"]["conv1.weight"].device
     x = torch.linspace(-1, 1, 3 * size * size, device=device).reshape(1, 3, size, size)
     y = torch.zeros(1, dtype=torch.long, device=device)
     rows = [profile_split_point(model, config, x, y, split) for split in SPLIT_POINTS]
@@ -1856,7 +1888,8 @@ def make_output_directory(config: dict, label: str, version: dict | None = None)
 
 
 @contextmanager
-def experiment_output(config: dict, label: str, output: str | Path | None = None):
+def experiment_output(config: dict, label: str, output: str | Path | None = None, *,
+                      training_device_requested: str | None = None):
     """为各入口保存参数、版本和运行状态，独占结果目录。"""
     version = code_version()
     directory = Path(output) if output else make_output_directory(config, label, version)
@@ -1866,6 +1899,10 @@ def experiment_output(config: dict, label: str, output: str | Path | None = None
     now = lambda: datetime.now(timezone(timedelta(hours=8))).isoformat()
     metadata = {"mode": label, "status": "running", "started_at": now(), "finished_at": None,
                 "output_dir": str(directory.resolve()), "code_version": version}
+    if training_device_requested is not None:
+        device = config["training"]["device"]
+        metadata.update(training_device=device, training_device_requested=training_device_requested)
+        print(f"模型执行设备：{device}（请求：{training_device_requested}）", file=sys.stderr, flush=True)
     # 排他创建运行记录，防止两个显式 --output 同时写入同一目录。
     with (directory / "run.json").open("x", encoding="utf-8") as stream:
         json.dump(metadata, stream, ensure_ascii=False, indent=2)
@@ -1915,7 +1952,10 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
     单轮可行不等于任务必然完成，调用者应先检查 summary['completed']。
     """
     config = validate_config(config)
-    with experiment_output(config, label or ("train" if train else "simulate"), output) as (directory, metadata):
+    requested_device = config["training"]["device"]
+    config["training"]["device"] = resolve_training_device(requested_device)
+    with experiment_output(config, label or ("train" if train else "simulate"), output,
+                           training_device_requested=requested_device) as (directory, metadata):
         result = execute_experiment(config, train, data, profile, directory, metadata["code_version"])
         summary = result["summary"]
         metadata.update(status=summary["status"], epochs_completed=summary["epochs_completed"],
@@ -2509,18 +2549,21 @@ def build_argument_parser():
     parser.add_argument("--output", help="本次运行的新目录；不得覆盖已有 config.json")
     parser.add_argument("--checkpoint", help="ResNet18 本地预训练参数路径")
     parser.add_argument("--allow-random-init", action="store_true", help="显式允许随机初始化，仅用于诊断/指定的消融")
+    parser.add_argument("--device", metavar="DEVICE", help="模型设备：auto、cpu、cuda 或 cuda:N；覆盖 training.device")
     return parser
 
 
 def load_cli_config(args: argparse.Namespace):
     """读取 JSON 和显式命令行覆盖，保持原参数优先级。"""
     updates = {}
-    if args.checkpoint or args.allow_random_init:
+    if args.checkpoint or args.allow_random_init or args.device is not None:
         updates["training"] = {}
         if args.checkpoint:
             updates["training"]["checkpoint"] = str(Path(args.checkpoint).resolve())
         if args.allow_random_init:
             updates["training"]["allow_random_init"] = True
+        if args.device is not None:
+            updates["training"]["device"] = args.device
     return load_config(args.config, updates)
 
 
@@ -2552,7 +2595,11 @@ def run_experiment_command(args: argparse.Namespace, config: dict):
 
 def run_preparation_command(args: argparse.Namespace, config: dict):
     """执行并存档 check、prepare 或 profile 的结果。"""
-    with experiment_output(config, args.command, args.output) as (output, metadata):
+    requested_device = None
+    if args.command == "profile":
+        requested_device = config["training"]["device"]
+        config["training"]["device"] = resolve_training_device(requested_device)
+    with experiment_output(config, args.command, args.output, training_device_requested=requested_device) as (output, metadata):
         if args.command == "check":
             report = verify_implementation(config)
             save_json(output / "verification.json", report)
@@ -2573,7 +2620,10 @@ def run_preparation_command(args: argparse.Namespace, config: dict):
 
 def main() -> int:
     """命令行入口：解析参数、加载配置，再分派到相应的小函数。"""
-    args = build_argument_parser().parse_args()
+    parser = build_argument_parser()
+    args = parser.parse_args()
+    if args.device is not None and args.command in ("check", "prepare"):
+        parser.error(f"{args.command} 不接受 --device，请用 smoke 验证训练设备。")
     config = load_cli_config(args)
     if args.command == "config":
         print(json.dumps({"config": config, "training_budget": training_budget(config)}, ensure_ascii=False, indent=2))
