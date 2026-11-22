@@ -89,6 +89,7 @@ from typing import Any
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent
+MAX_EPOCH_DEADLINE_S = 400.0
 CLASSES = ["bicycle", "building", "car", "pedestrian", "road", "sidewalk", "sky", "store", "tree"]
 MEAN = (0.485, 0.456, 0.406)
 STD = (0.229, 0.224, 0.225)
@@ -165,20 +166,21 @@ def default_config(num_uavs: int = 4) -> dict:
         # power_max_w 是上行发射功率 W，cycles_per_flop 将 FLOPs 换成等效周期。
         # 所有 UAV 参数均可为公共标量或按 UAV 1..N 排列的列表。
         # energy_cap_j 是扣除固定消耗后的训练可用电量 J。
-        "uav": {"kappa": 1e-28, "compute_power_max_w": [0.1, 0.1728, 0.3375, 0.5832],
-                "power_max_w": [0.3, 0.5, 0.8, 1.0],
+        "uav": {"kappa": 1.85e-28, "compute_power_max_w": [4.5, 4.8, 5.2, 5.5],
+                "power_max_w": [0.45, 0.48, 0.52, 0.55],
                 "cycles_per_flop": [1.0, 0.75, 0.5, 0.375],
-                "energy_cap_j": [12000.0, 16000.0, 20000.0, 24000.0]},
+                "energy_cap_j": [120000.0, 95000.0, 110000.0, 85000.0]},
         # frequency_hz 为每条并行后缀分支的频率，downlink_power_w 为每条链路功率。
         # aggregation_time_s/energy_j 每次完整聚合只计一次，不乘 UAV 数量。
-        "server": {"frequency_hz": 3e9, "kappa": 1e-28, "cycles_per_flop": 0.03,
+        # 在 3 GHz 下，每条后缀分支的计算功率为 100 W。
+        "server": {"frequency_hz": 3e9, "kappa": 3.703703703703704e-27, "cycles_per_flop": 0.03,
                    "downlink_power_w": 2.0, "aggregation_time_s": 0.01,
                    "aggregation_energy_j": 0.1},
         # 上下行各自共享总带宽，单位 Hz；两方向预算不能互相挪用。
         "radio": {"total_up_hz": 2e7, "total_down_hz": 2e7},
         # 初始参考频率/功率相对于对应上限的比例，初始带宽按 N 等分。
         # 参考配置只提供候选评分/初值，执行前仍需校验时限和电池。
-        "reference": {"frequency_fraction": 0.8, "power_fraction": 0.5},
+        "reference": {"frequency_fraction": 1.0, "power_fraction": 1.0},
         # strategy: fixed_fixed / fixed_opt / dynamic_opt / no_window，详见 README。
         # fixed_split 为客户端残差块数 0/2/4/6/8；动态策略从它开始寻找首周期切分，之后可改变。
         # window_epochs 只统计已完成轮次；max_iterations 为每次 P2 的迭代上限。
@@ -192,7 +194,7 @@ def default_config(num_uavs: int = 4) -> dict:
                          "relative_tolerance": 1e-5, "feasibility_tolerance": 2e-6,
                          "positive_floor": 1e-5, "solver": "CLARABEL"},
         # deadline 是单 epoch 时限；fixed_energy_j 是系统固定消耗，仅汇总时加一次。
-        "task": {"epoch_deadline_s": 600.0, "fixed_energy_j": 0.0},
+        "task": {"epoch_deadline_s": MAX_EPOCH_DEADLINE_S, "fixed_energy_j": 0.0},
         "output_root": str(ROOT / "output"),
     }
     if num_uavs != 4:
@@ -314,8 +316,10 @@ def validate_hardware_config(c: dict):
                 raise ValueError(f"{key} 必须非负")
         else:
             require_positive(val, key)
-    require_positive(c["task"]["epoch_deadline_s"], "epoch_deadline_s")
-    if not math.isfinite(c["task"]["fixed_energy_j"]) or c["task"]["fixed_energy_j"] < 0:
+    task = c["task"]
+    require_positive(task["epoch_deadline_s"], "epoch_deadline_s")
+    task["epoch_deadline_s"] = min(task["epoch_deadline_s"], MAX_EPOCH_DEADLINE_S)
+    if not math.isfinite(task["fixed_energy_j"]) or task["fixed_energy_j"] < 0:
         raise ValueError("fixed_energy_j 必须非负")
 
 def require_finite_vector(values, length: int, name: str):

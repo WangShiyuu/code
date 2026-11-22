@@ -54,6 +54,8 @@ $sflPython = 'E:\Work1SFL\artifacts\archive_verification_env\Scripts\python.exe'
 
 修改默认参数可编辑 `config.py` 中的 `default_config()`。单次实验也可以用 `--config <JSON 路径>` 覆盖部分参数。新 Python 环境可安装 `numpy>=1.26`、`Pillow>=10`、`torch>=2.5`、`cvxpy>=1.6` 和 `clarabel>=0.10`。
 
+单轮时限默认 400 秒，配置校验会将超过 400 秒的值限制为 400 秒。按 UAV 1 至 UAV 4 排列，训练电量预算为 `[120000, 95000, 110000, 85000]` J，计算功率上限为 `[4.5, 4.8, 5.2, 5.5]` W，上行发射功率上限为 `[0.45, 0.48, 0.52, 0.55]` W。服务器每条后缀分支在 3 GHz 下按 100 W 计算，四条分支同时计算时合计 400 W。
+
 ### 在 RTX 3080 上运行
 
 按 [code_v2 的 CUDA 环境步骤](../code_v2/README.md#在-rtx-3080-上运行)安装依赖，然后在
