@@ -1,0 +1,18 @@
+{
+  "mode": "train",
+  "status": "completed",
+  "started_at": "2026-11-22T23:49:33.374925+08:00",
+  "finished_at": "2026-11-23T04:18:58.755868+08:00",
+  "output_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\output\\output_20261122_234933_374515_22ad5e642e8f_train_seed42",
+  "code_version": {
+    "git_commit": "22ad5e642e8f831d966c89594d39ee11579bdd9c",
+    "git_dirty": false,
+    "source_sha256": "8f54ad4212ada844b285efdedadf20c618651f10615d69b9af9c35a389063561"
+  },
+  "training_device": "cuda:0",
+  "training_device_requested": "cuda:0",
+  "epochs_completed": 120,
+  "epochs_planned": 120,
+  "failure": null,
+  "wall_s": 16165.37862199999
+}

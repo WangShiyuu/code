@@ -1,0 +1,17 @@
+{
+  "python": "3.13.13 | packaged by Anaconda, Inc. | (main, Apr 14 2026, 06:12:50) [MSC v.1942 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "packages": {
+    "numpy": "2.5.5",
+    "Pillow": "13.0.0",
+    "torch": "2.11.0+cu126",
+    "cvxpy": "1.9.3",
+    "clarabel": "0.11.1"
+  },
+  "code_version": {
+    "git_commit": "22ad5e642e8f831d966c89594d39ee11579bdd9c",
+    "git_dirty": false,
+    "source_sha256": "8f54ad4212ada844b285efdedadf20c618651f10615d69b9af9c35a389063561"
+  },
+  "code_sha256": "8f54ad4212ada844b285efdedadf20c618651f10615d69b9af9c35a389063561"
+}
