@@ -7,7 +7,7 @@ import sys
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from code_v3.optimization import make_problem, reference_resources
+from code_v2.uav_sfl import make_problem, reference_resources
 from code_v4.experiment import EpochDecision, EpochState, run_baseline
 
 

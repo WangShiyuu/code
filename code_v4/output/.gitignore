@@ -1,1 +1,4 @@
-/output_*/
+/*
+!/.gitignore
+!/output_*/
+/output_*_smoke_*/

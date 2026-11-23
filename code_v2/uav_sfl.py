@@ -1735,7 +1735,7 @@ def rebuild_reference(epoch: int, count: int, current: np.ndarray, window_gain: 
 
 
 # 7. 联合仿真/训练流程与结果保存 -------------------------------------------------
-def code_version() -> dict:
+def code_version(additional_paths: tuple[str, ...] = ()) -> dict:
     """记录当前提交与实际源码哈希，Git 不可用时仍可追溯源码。"""
     source_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     commit, dirty = None, None
@@ -1743,8 +1743,12 @@ def code_version() -> dict:
         result = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
                                 capture_output=True, text=True, check=True, timeout=5)
         commit = result.stdout.strip()
-        result = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain",
-                                 "--untracked-files=normal", "--", ".", ":(exclude)output/**"],
+        status_root, pathspec = ROOT, [".", ":(exclude)output/**"]
+        if additional_paths:
+            status_root = ROOT.parent
+            pathspec = [ROOT.name, f":(exclude){ROOT.name}/output/**", *additional_paths]
+        result = subprocess.run(["git", "-C", str(status_root), "status", "--porcelain",
+                                 "--untracked-files=normal", "--", *pathspec],
                                 capture_output=True, text=True, check=True, timeout=5)
         dirty = bool(result.stdout.strip())
     except (OSError, subprocess.SubprocessError):
@@ -1756,9 +1760,10 @@ def make_output_directory(config: dict, label: str, version: dict | None = None)
     """I/O：按北京时间创建唯一目录，不覆盖已有实验。"""
     version = code_version() if version is None else version
     stamp = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d_%H%M%S_%f")
-    tag = version["git_commit"][:12] if version["git_commit"] else "src" + version["source_sha256"][:12]
+    source_sha = version.get("source_bundle_sha256", version["source_sha256"])
+    tag = version["git_commit"][:12] if version["git_commit"] else "src" + source_sha[:12]
     if version["git_dirty"]:
-        tag += "_dirty_src" + version["source_sha256"][:8]
+        tag += "_dirty_src" + source_sha[:8]
     output = Path(config["output_root"]) / f"output_{stamp}_{tag}_{label}_seed{config['seed']}"
     output.mkdir(parents=True, exist_ok=False)
     return output
@@ -1766,9 +1771,18 @@ def make_output_directory(config: dict, label: str, version: dict | None = None)
 
 @contextmanager
 def experiment_output(config: dict, label: str, output: str | Path | None = None, *,
-                      training_device_requested: str | None = None):
+                      training_device_requested: str | None = None,
+                      source_files: dict[str, bytes] | None = None):
     """为各入口保存参数、版本和运行状态，独占结果目录。"""
-    version = code_version()
+    version = code_version(tuple(source_files or ()))
+    if source_files:
+        file_hashes = {
+            name: hashlib.sha256(content).hexdigest() for name, content in source_files.items()
+        }
+        file_hashes[f"{ROOT.name}/{Path(__file__).name}"] = version["source_sha256"]
+        version["source_files_sha256"] = file_hashes
+        source_manifest = json.dumps(file_hashes, sort_keys=True, separators=(",", ":"))
+        version["source_bundle_sha256"] = hashlib.sha256(source_manifest.encode("utf-8")).hexdigest()
     directory = Path(output) if output else make_output_directory(config, label, version)
     directory.mkdir(parents=True, exist_ok=True)
     if (directory / "config.json").exists():
@@ -1840,8 +1854,8 @@ def run_experiment(config: dict, train: bool = False, data: dict | None = None,
         return result
 
 
-def execute_experiment(config, train, data, profile, output, version):
-    """在已分配并存档的目录执行计算，输入/输出协议由 run_experiment 管理。"""
+def execute_experiment(config, train, data, profile, output, version, *, epoch_policy=None):
+    """运行已存档的实验；基线可提供逐轮策略，复用数据、训练和结果记录。"""
     import torch
     torch.set_num_threads(config["training"]["torch_threads"])
     start_wall = time.perf_counter()
@@ -1857,7 +1871,7 @@ def execute_experiment(config, train, data, profile, output, version):
     save_json(output / "initialization.json", provenance)
     n, epochs = config["num_uavs"], config["training"]["epochs"]
     strategy = config["optimization"]["strategy"]
-    dynamic = strategy in ("dynamic_opt", "no_window")
+    dynamic = epoch_policy is None and strategy in ("dynamic_opt", "no_window")
     current = np.full(n, config["optimization"]["fixed_split"], dtype=int)
     reference = reference_resources(config)
     remaining = uav_parameter(config, "energy_cap_j").copy()
@@ -1873,6 +1887,7 @@ def execute_experiment(config, train, data, profile, output, version):
             snapshot = epoch_snapshot(data, time_s, epoch, config)
             channel = channel_at(time_s, config)
             selection = None
+            decision_started = time.perf_counter()
             # 第二步：首轮确定当前切分；非最终偶数轮预选“下一周期”的切分。
             # 预选提前到当前聚合轮开始，是为了在 P2 求解前确定新前缀下发量。
             # 此时 current 仍用于本轮训练，直到该轮训练与聚合完成后才切换。
@@ -1899,24 +1914,36 @@ def execute_experiment(config, train, data, profile, output, version):
             attempts, solved, problem = [], None, None
             # 第三步：在真实当前信道下尝试候选并求 P2。参考筛选负责产生队列，
             # 不能代替实际时限/电池审计；任何候选都不可行时，在更新模型前停止。
-            for cuts in queue:
-                trial_current = cuts if choosing_current else current
-                q = cuts if choosing_next else None
-                problem = make_problem(epoch, snapshot["count"], channel["gain"], trial_current, q, remaining, config)
-                if strategy == "fixed_fixed":
-                    resource = reference_resources(config)
-                    audit = audit_resources(problem, resource, profile, config)
-                    candidate = {"ok": audit["ok"], "status": "fixed_resources" if audit["ok"] else "fixed_resources_infeasible",
-                                 "resources": resource, "metrics": evaluate_resources(problem, resource, profile, config),
-                                 "trace": [], "audit": audit, "wall_s": 0.0}
-                else:
-                    candidate = solve_resources(problem, profile, config, reference,
-                                                retain_feasible=dynamic and config["optimization"]["split_objective"] == "optimized_window")
-                attempts.append({"split": trial_current, "next_split": q, "solve": candidate})
-                if candidate["ok"]:
-                    current = trial_current
-                    solved = candidate
+            if epoch_policy is not None:
+                problem, candidate, selection, attempts = epoch_policy(
+                    epoch, snapshot["count"], current, channel["gain"], gain_history,
+                    remaining, reference, profile, config,
+                )
+                if not candidate["ok"]:
+                    failure = {"epoch": epoch, "reason": candidate["status"], "attempts": attempts,
+                               "selection": selection, "decision_wall_s": time.perf_counter() - decision_started}
                     break
+                solved, current = candidate, problem["split"]
+            else:
+                for cuts in queue:
+                    trial_current = cuts if choosing_current else current
+                    q = cuts if choosing_next else None
+                    problem = make_problem(epoch, snapshot["count"], channel["gain"], trial_current, q, remaining, config)
+                    if strategy == "fixed_fixed":
+                        resource = reference_resources(config)
+                        audit = audit_resources(problem, resource, profile, config)
+                        candidate = {"ok": audit["ok"], "status": "fixed_resources" if audit["ok"] else "fixed_resources_infeasible",
+                                     "resources": resource, "metrics": evaluate_resources(problem, resource, profile, config),
+                                     "trace": [], "audit": audit, "wall_s": 0.0}
+                    else:
+                        candidate = solve_resources(problem, profile, config, reference,
+                                                    retain_feasible=dynamic and config["optimization"]["split_objective"] == "optimized_window")
+                    attempts.append({"split": trial_current, "next_split": q, "solve": candidate})
+                    if candidate["ok"]:
+                        current = trial_current
+                        solved = candidate
+                        break
+            decision_wall_s = time.perf_counter() - decision_started
             if solved is None:
                 failure = {"epoch": epoch, "reason": "no_current_feasible_candidate", "attempts": attempts}
                 break
@@ -1951,6 +1978,7 @@ def execute_experiment(config, train, data, profile, output, version):
                    "resources": solved["resources"], "metrics": metrics,
                    "remaining_before_j": remaining.copy(), "remaining_after_j": remaining - metrics["uav_energy_j"],
                    "solver_status": solved["status"], "solver_wall_s": solved["wall_s"],
+                   "decision_wall_s": decision_wall_s,
                    "training_wall_s": time.perf_counter() - training_wall if train else 0.0,
                    "train": train_metrics, "validation": validation}
             with (output / "decisions.jsonl").open("a", encoding="utf-8") as stream:
@@ -1976,7 +2004,7 @@ def execute_experiment(config, train, data, profile, output, version):
     completed = len(history) == epochs and failure is None
     summary = {"status": "completed" if completed else "incomplete", "completed": completed,
                "mode": "training" if train else "cost_simulation", "dataset_kind": data["kind"],
-               "strategy": strategy, "epochs_completed": len(history), "epochs_planned": epochs,
+               "strategy": config.get("baseline", strategy), "epochs_completed": len(history), "epochs_planned": epochs,
                "aggregations_completed": sum(int(row["aggregate"]) for row in history),
                "reference_recovery": config["optimization"]["reference_recovery"],
                "budget": training_budget(config), "start_s": data["start_s"], "finish_s": time_s,
@@ -1995,8 +2023,9 @@ def execute_experiment(config, train, data, profile, output, version):
     if train and last_aggregation:
         # 这里已离开训练循环，测试集从未参与选模。未完成时的“最近聚合模型”
         # 仍可供诊断，但不会被标记为完成任务的 final_model。
-        summary["last_aggregated_test"] = evaluate_model(global_model, data, data["test"], config)
-        summary["best_validation_model_test"] = evaluate_model(best_model, data, data["test"], config)
+        if completed or epoch_policy is None:
+            summary["last_aggregated_test"] = evaluate_model(global_model, data, data["test"], config)
+            summary["best_validation_model_test"] = evaluate_model(best_model, data, data["test"], config)
         if config["training"]["save_checkpoint"]:
             torch.save(checkpoint_payload(global_model), output / "last_aggregated_model.pt")
             torch.save(checkpoint_payload(best_model), output / "best_validation_model.pt")

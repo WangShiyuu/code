@@ -11,8 +11,8 @@ import numpy as np
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from code_v3.config import SPLIT_POINTS
-from code_v3.optimization import (
+from code_v2.uav_sfl import (
+    SPLIT_POINTS,
     audit_resources,
     evaluate_resources,
     make_problem,
@@ -51,9 +51,7 @@ def choose_epoch(state: EpochState) -> EpochDecision:
         problem = make_problem(
             state.epoch, state.count, state.gain, state.current, None, state.remaining, config,
         )
-        if audit_resources(problem, resources, state.profile, config)["ok"]:
-            return EpochDecision(problem, resources, "fixed_resources")
-        return EpochDecision(problem, None, "fixed_resources_infeasible")
+        return EpochDecision(problem, resources, "fixed_resources")
 
     window = config["optimization"]["window_epochs"]
     gains = state.gain_history[-window:]
@@ -66,17 +64,26 @@ def choose_epoch(state: EpochState) -> EpochDecision:
         if energy is not None:
             ranked.append((energy, cuts != current, cuts))
 
-    attempts = len(SPLIT_POINTS) ** num_uavs
-    for _, _, cuts in sorted(ranked):
+    ranked.sort()
+    selection = {
+        "combinations_evaluated": len(SPLIT_POINTS) ** num_uavs,
+        "feasible_combinations": len(ranked),
+        "window_gain": window_gain,
+        "candidates": [cuts for _, _, cuts in ranked],
+        "forecast_energy_j": [energy for energy, _, _ in ranked],
+    }
+    for attempt, (_, _, cuts) in enumerate(ranked, start=1):
         active = state.current if state.choosing_next else cuts
         following = cuts if state.choosing_next else None
         problem = make_problem(
             state.epoch, state.count, state.gain, active, following, state.remaining, config,
         )
         if audit_resources(problem, resources, state.profile, config)["ok"]:
-            return EpochDecision(problem, resources, "fixed_resources", attempts)
+            selection["current_candidates_checked"] = attempt
+            return EpochDecision(problem, resources, "fixed_resources", selection=selection)
     status = "fixed_resources_current_infeasible" if ranked else "fixed_resources_window_infeasible"
-    return EpochDecision(None, None, status, attempts)
+    selection["current_candidates_checked"] = len(ranked)
+    return EpochDecision(None, None, status, selection=selection)
 
 
 if __name__ == "__main__":

@@ -9,8 +9,9 @@ import numpy as np
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from code_v3.config import SPLIT_POINTS, uav_parameter
-from code_v3.optimization import audit_resources, evaluate_resources, make_problem, maximum_frequency
+from code_v2.uav_sfl import (
+    SPLIT_POINTS, audit_resources, evaluate_resources, make_problem, maximum_frequency, uav_parameter,
+)
 from code_v4.experiment import EpochDecision, EpochState, run_baseline
 
 
@@ -67,8 +68,8 @@ def choose_epoch(state: EpochState) -> EpochDecision:
         problem = make_problem(state.epoch, state.count, state.gain, current, next_split, state.remaining, state.config)
         resources = draw_resources(state, frequency_cap, power_cap)
         if feasible_commitment(state, problem, resources):
-            return EpochDecision(problem, resources, "random_feasible", attempt)
-    return EpochDecision(problem, None, "random_feasible_sample_not_found", MAX_ATTEMPTS)
+            return EpochDecision(problem, resources, "random_feasible", selection={"proposals": attempt})
+    return EpochDecision(problem, None, "random_feasible_sample_not_found", selection={"proposals": MAX_ATTEMPTS})
 
 
 if __name__ == "__main__":

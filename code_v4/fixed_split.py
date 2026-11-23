@@ -7,7 +7,7 @@ import sys
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from code_v3.optimization import make_problem, solve_resources
+from code_v2.uav_sfl import make_problem, solve_resources
 from code_v4.experiment import EpochDecision, EpochState, run_baseline
 
 
@@ -16,7 +16,7 @@ def choose_epoch(state: EpochState) -> EpochDecision:
     problem = make_problem(state.epoch, state.count, state.gain, state.current, next_split,
                            state.remaining, state.config)
     result = solve_resources(problem, state.profile, state.config, state.reference, retain_feasible=True)
-    return EpochDecision(problem, result["resources"], result["status"])
+    return EpochDecision(problem, result["resources"], result["status"], solve=result)
 
 
 if __name__ == "__main__":
