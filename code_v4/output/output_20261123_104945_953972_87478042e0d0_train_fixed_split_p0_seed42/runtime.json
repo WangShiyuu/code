@@ -1,0 +1,24 @@
+{
+  "python": "3.13.13 | packaged by Anaconda, Inc. | (main, Apr 14 2026, 06:12:50) [MSC v.1942 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "packages": {
+    "numpy": "2.5.5",
+    "Pillow": "13.0.0",
+    "torch": "2.11.0+cu126",
+    "cvxpy": "1.9.3",
+    "clarabel": "0.11.1"
+  },
+  "code_version": {
+    "git_commit": "87478042e0d080fb2f98fdf83e4714954e2bb30e",
+    "git_dirty": false,
+    "source_sha256": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177",
+    "source_files_sha256": {
+      "code_v4/fixed_split.py": "5f5a6b094863431e5035a388c3c05d0aca373dc3e506169993365f6d558bc5a8",
+      "code_v4/experiment.py": "5b93a9456eb00cbb432ece14efb655e3c367eb7d66da5846851fb2bea5e7dd68",
+      "code_v4/results1122_config.json": "a07cc46ff3197339ac73fa6613cc84bc6d3656e1e22a381dad18b4e29d990221",
+      "code_v2/uav_sfl.py": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177"
+    },
+    "source_bundle_sha256": "08991a5d585d6dff293ca11771a5572e20850c535a97f78a6bfe78304049b9bd"
+  },
+  "code_sha256": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177"
+}
