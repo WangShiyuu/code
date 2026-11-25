@@ -1,0 +1,28 @@
+{
+  "kind": "local_checkpoint",
+  "path": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\resnet18-f37072fd.pth",
+  "sha256": "f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec",
+  "head_reinitialized": true,
+  "legacy_bn_counters_initialized": [
+    "bn1.num_batches_tracked",
+    "layer1.0.bn1.num_batches_tracked",
+    "layer1.0.bn2.num_batches_tracked",
+    "layer1.1.bn1.num_batches_tracked",
+    "layer1.1.bn2.num_batches_tracked",
+    "layer2.0.bn1.num_batches_tracked",
+    "layer2.0.bn2.num_batches_tracked",
+    "layer2.0.downsample.1.num_batches_tracked",
+    "layer2.1.bn1.num_batches_tracked",
+    "layer2.1.bn2.num_batches_tracked",
+    "layer3.0.bn1.num_batches_tracked",
+    "layer3.0.bn2.num_batches_tracked",
+    "layer3.0.downsample.1.num_batches_tracked",
+    "layer3.1.bn1.num_batches_tracked",
+    "layer3.1.bn2.num_batches_tracked",
+    "layer4.0.bn1.num_batches_tracked",
+    "layer4.0.bn2.num_batches_tracked",
+    "layer4.0.downsample.1.num_batches_tracked",
+    "layer4.1.bn1.num_batches_tracked",
+    "layer4.1.bn2.num_batches_tracked"
+  ]
+}

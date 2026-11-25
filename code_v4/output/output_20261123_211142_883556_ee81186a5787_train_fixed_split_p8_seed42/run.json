@@ -1,0 +1,403 @@
+{
+  "mode": "train",
+  "status": "incomplete",
+  "started_at": "2026-11-23T21:11:42.884068+08:00",
+  "finished_at": "2026-11-23T21:36:46.816035+08:00",
+  "output_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v4\\output\\output_20261123_211142_883556_ee81186a5787_train_fixed_split_p8_seed42",
+  "code_version": {
+    "git_commit": "ee81186a57875f9b8767d9badac7a441eb4df55c",
+    "git_dirty": false,
+    "source_sha256": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177",
+    "source_files_sha256": {
+      "code_v4/fixed_split.py": "5f5a6b094863431e5035a388c3c05d0aca373dc3e506169993365f6d558bc5a8",
+      "code_v4/experiment.py": "5b93a9456eb00cbb432ece14efb655e3c367eb7d66da5846851fb2bea5e7dd68",
+      "code_v4/results1122_config.json": "a07cc46ff3197339ac73fa6613cc84bc6d3656e1e22a381dad18b4e29d990221",
+      "code_v2/uav_sfl.py": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177"
+    },
+    "source_bundle_sha256": "08991a5d585d6dff293ca11771a5572e20850c535a97f78a6bfe78304049b9bd"
+  },
+  "training_device": "cuda:0",
+  "training_device_requested": "cuda:0",
+  "baseline": "fixed_split",
+  "gpu": "NVIDIA GeForce RTX 3080 Ti",
+  "cuda_version": "12.6",
+  "epochs_completed": 27,
+  "epochs_planned": 120,
+  "failure": {
+    "epoch": 28,
+    "reason": "feasible_initialization_not_found",
+    "attempts": [
+      {
+        "split": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "next_split": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "solve": {
+          "ok": false,
+          "status": "feasible_initialization_not_found",
+          "resources": null,
+          "metrics": null,
+          "trace": [],
+          "initialization": [
+            {
+              "method": "previous",
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.08444472284883262,
+                "residuals": {
+                  "deadline_s": 33.777889139533045,
+                  "battery_j": [
+                    -100478.63995404248,
+                    -86734.23013332543,
+                    -107510.49350150749,
+                    -83921.60768484947
+                  ],
+                  "frequency_hz": [
+                    -119334964.85504055,
+                    -872783403.6539905,
+                    -1641998147.2356114,
+                    -2044918662.4798894
+                  ],
+                  "power_w": [
+                    -1.1206856109780006e-08,
+                    -0.039426927986343896,
+                    -0.2984623645578956,
+                    -0.4441851286446992
+                  ],
+                  "up_hz": -0.028923574835062027,
+                  "down_hz": -0.01939966157078743
+                }
+              }
+            },
+            {
+              "method": "reference",
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.017240064768220407,
+                "residuals": {
+                  "deadline_s": 6.896025907288163,
+                  "battery_j": [
+                    -100335.715463434,
+                    -86040.89185265572,
+                    -106744.66651708166,
+                    -83251.61193226553
+                  ],
+                  "frequency_hz": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "power_w": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "up_hz": 0.0,
+                  "down_hz": 0.0
+                }
+              }
+            },
+            {
+              "method": "maximum_equal_bandwidth",
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.017240064768220407,
+                "residuals": {
+                  "deadline_s": 6.896025907288163,
+                  "battery_j": [
+                    -100335.715463434,
+                    -86040.89185265572,
+                    -106744.66651708166,
+                    -83251.61193226553
+                  ],
+                  "frequency_hz": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "power_w": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "up_hz": 0.0,
+                  "down_hz": 0.0
+                }
+              }
+            },
+            {
+              "method": "fixed_power_phase_one",
+              "power_fraction": 1.0,
+              "ok": false,
+              "status": "optimal",
+              "warnings": [],
+              "dcp": true,
+              "wall_s": 0.01613919995725155,
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.01394292000112344,
+                "residuals": {
+                  "deadline_s": 5.577168000449376,
+                  "battery_j": [
+                    -100335.02196360096,
+                    -86672.08263443697,
+                    -107486.25652080582,
+                    -83853.43314208537
+                  ],
+                  "frequency_hz": [
+                    -0.03269052505493164,
+                    -781660510.9268885,
+                    -1565303338.6840057,
+                    -1702008438.834172
+                  ],
+                  "power_w": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "up_hz": -0.023141682147979736,
+                  "down_hz": -0.02666911482810974
+                }
+              },
+              "epigraph_s": [
+                393.82284237578153,
+                6.370941302342653,
+                5.37245726557589
+              ],
+              "phase_slack": 0.013940602360868613
+            },
+            {
+              "method": "fixed_power_phase_one",
+              "power_fraction": 0.3,
+              "ok": false,
+              "status": "optimal_inaccurate",
+              "warnings": [
+                "Solution may be inaccurate. Try another solver, adjusting the solver settings, or solve with verbose=True for more information."
+              ],
+              "dcp": true,
+              "wall_s": 0.01607540005352348,
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.017674977813188802,
+                "residuals": {
+                  "deadline_s": 7.069991125275521,
+                  "battery_j": [
+                    -100337.25221805577,
+                    -86664.87822167373,
+                    -107472.30858003182,
+                    -83845.71126218219
+                  ],
+                  "frequency_hz": [
+                    -0.2376861572265625,
+                    -767650940.7757931,
+                    -1512646662.0515609,
+                    -1654957921.8650992
+                  ],
+                  "power_w": [
+                    -0.315,
+                    -0.33599999999999997,
+                    -0.364,
+                    -0.385
+                  ],
+                  "up_hz": -0.08917724341154099,
+                  "down_hz": -0.1169559471309185
+                }
+              },
+              "epigraph_s": [
+                394.0395403570644,
+                7.647491095476651,
+                5.372605811459005
+              ],
+              "phase_slack": 0.01767409323306653
+            },
+            {
+              "method": "fixed_power_phase_one",
+              "power_fraction": 0.1,
+              "ok": false,
+              "status": "optimal",
+              "warnings": [],
+              "dcp": true,
+              "wall_s": 0.015268299961462617,
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.02266836944347759,
+                "residuals": {
+                  "deadline_s": 9.067347777391035,
+                  "battery_j": [
+                    -100337.97306475838,
+                    -86676.58949017608,
+                    -107494.55675389452,
+                    -83876.09530554709
+                  ],
+                  "frequency_hz": [
+                    -0.00841522216796875,
+                    -783522999.1646166,
+                    -1580905030.6451392,
+                    -1791249392.4580061
+                  ],
+                  "power_w": [
+                    -0.405,
+                    -0.432,
+                    -0.468,
+                    -0.49500000000000005
+                  ],
+                  "up_hz": -0.005526989698410034,
+                  "down_hz": -0.00855594128370285
+                }
+              },
+              "epigraph_s": [
+                394.29948046752304,
+                9.38487169809373,
+                5.372577435569177
+              ],
+              "phase_slack": 0.02266732400199693
+            },
+            {
+              "method": "fixed_power_phase_one",
+              "power_fraction": 0.03,
+              "ok": false,
+              "status": "optimal",
+              "warnings": [],
+              "dcp": true,
+              "wall_s": 0.014627599972300231,
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.03156193589708124,
+                "residuals": {
+                  "deadline_s": 12.624774358832497,
+                  "battery_j": [
+                    -100338.26192563739,
+                    -86657.89924952979,
+                    -107472.50612448879,
+                    -83853.66202730751
+                  ],
+                  "frequency_hz": [
+                    -0.31604480743408203,
+                    -755907104.1453099,
+                    -1509408994.395491,
+                    -1684546085.3383412
+                  ],
+                  "power_w": [
+                    -0.4365,
+                    -0.46559999999999996,
+                    -0.5044000000000001,
+                    -0.5335000000000001
+                  ],
+                  "up_hz": -0.07790089026093483,
+                  "down_hz": -0.1447293907403946
+                }
+              },
+              "epigraph_s": [
+                394.6865811691387,
+                12.555489586040064,
+                5.372563742644382
+              ],
+              "phase_slack": 0.031561586351163885
+            },
+            {
+              "method": "fixed_power_phase_one",
+              "power_fraction": 0.01,
+              "ok": false,
+              "status": "optimal",
+              "warnings": [],
+              "dcp": true,
+              "wall_s": 0.014729700051248074,
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.046798840120904114,
+                "residuals": {
+                  "deadline_s": 18.719536048361647,
+                  "battery_j": [
+                    -100338.35888490669,
+                    -86672.90640308459,
+                    -107495.90422129432,
+                    -83879.25443185125
+                  ],
+                  "frequency_hz": [
+                    -0.011888504028320312,
+                    -777493427.8439445,
+                    -1583717568.0600452,
+                    -1804179890.8323495
+                  ],
+                  "power_w": [
+                    -0.4455,
+                    -0.47519999999999996,
+                    -0.5148,
+                    -0.5445000000000001
+                  ],
+                  "up_hz": -0.0033338405191898346,
+                  "down_hz": -0.007570274174213409
+                }
+              },
+              "epigraph_s": [
+                395.1735453186946,
+                18.163141615679816,
+                5.37258646142903
+              ],
+              "phase_slack": 0.04679818349192254
+            },
+            {
+              "method": "fixed_power_phase_one",
+              "power_fraction": 0.001,
+              "ok": false,
+              "status": "optimal",
+              "warnings": [],
+              "dcp": true,
+              "wall_s": 0.015091999899595976,
+              "audit": {
+                "ok": false,
+                "normalized_violation": 0.18927475746392303,
+                "residuals": {
+                  "deadline_s": 75.70990298556922,
+                  "battery_j": [
+                    -100338.41444201325,
+                    -86625.95365421407,
+                    -107482.21094142742,
+                    -83893.39948248443
+                  ],
+                  "frequency_hz": [
+                    -0.0006985664367675781,
+                    -710042386.5506296,
+                    -1539328505.7388039,
+                    -1875314629.6141572
+                  ],
+                  "power_w": [
+                    -0.44955,
+                    -0.47952,
+                    -0.51948,
+                    -0.54945
+                  ],
+                  "up_hz": -0.0007791072130203247,
+                  "down_hz": -0.0021251626312732697
+                }
+              },
+              "epigraph_s": [
+                396.63421405558745,
+                73.69301884900764,
+                5.372627807223893
+              ],
+              "phase_slack": 0.18927465177833075
+            }
+          ],
+          "wall_s": 0.1347153999377042
+        }
+      }
+    ],
+    "selection": null,
+    "decision_wall_s": 0.1349045999813825
+  },
+  "wall_s": 1503.931500799954
+}

@@ -1,0 +1,28 @@
+{
+  "mode": "train",
+  "status": "completed",
+  "started_at": "2026-11-24T11:04:55.212498+08:00",
+  "finished_at": "2026-11-24T15:59:20.810853+08:00",
+  "output_dir": "D:\\Wangshiyu\\Work1SFL\\code\\code_v4\\output\\output_20261124_110455_212192_27743de9749e_train_random_split_resources_seed42",
+  "code_version": {
+    "git_commit": "27743de9749e23ab28158ea0dc3b71250d7a0a7a",
+    "git_dirty": false,
+    "source_sha256": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177",
+    "source_files_sha256": {
+      "code_v4/random_split_resources.py": "6152b410a82c0ecb6f9fa82a2fbca726711b0a9ecabf4f1be0bf26cdcbd3a9c9",
+      "code_v4/experiment.py": "5b93a9456eb00cbb432ece14efb655e3c367eb7d66da5846851fb2bea5e7dd68",
+      "code_v4/results1122_config.json": "a07cc46ff3197339ac73fa6613cc84bc6d3656e1e22a381dad18b4e29d990221",
+      "code_v2/uav_sfl.py": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177"
+    },
+    "source_bundle_sha256": "d67b03a32cf3670f9b8e979d3e62ffa5594910c3e43678ccbe2f54f3739a1315"
+  },
+  "training_device": "cuda:0",
+  "training_device_requested": "cuda:0",
+  "baseline": "random_split_resources",
+  "gpu": "NVIDIA GeForce RTX 3080 Ti",
+  "cuda_version": "12.6",
+  "epochs_completed": 120,
+  "epochs_planned": 120,
+  "failure": null,
+  "wall_s": 17665.597817700007
+}

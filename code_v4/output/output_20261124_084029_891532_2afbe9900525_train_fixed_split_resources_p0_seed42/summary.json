@@ -1,0 +1,407 @@
+{
+  "status": "completed",
+  "completed": true,
+  "mode": "training",
+  "dataset_kind": "cbcl",
+  "strategy": "fixed_split_resources",
+  "epochs_completed": 120,
+  "epochs_planned": 120,
+  "aggregations_completed": 60,
+  "reference_recovery": "rebuild",
+  "budget": {
+    "epochs": 120,
+    "aggregations": 60,
+    "conditional_epochs": 100,
+    "mode": "empirical",
+    "effective_bound_verified": false
+  },
+  "start_s": 0.0,
+  "finish_s": 2743.837308580467,
+  "training_duration_s": 2743.837308580467,
+  "variable_energy_j": 254519.08685115894,
+  "system_energy_j": 254519.08685115894,
+  "uav_energy_j": [
+    4560.196652046945,
+    3651.78070044255,
+    2684.688316362921,
+    2179.8227625288755
+  ],
+  "server_energy_j": 241442.59841977758,
+  "remaining_j": [
+    115439.80334795304,
+    91348.21929955747,
+    107315.31168363712,
+    82820.17723747114
+  ],
+  "processed_samples": 285476,
+  "distinct_training_samples": 2808,
+  "best_validation_epoch": 118,
+  "best_validation": {
+    "loss": 0.4826552498691605,
+    "accuracy": 0.8680479825517994,
+    "macro_f1": 0.8110781357720571,
+    "confusion": [
+      [
+        8,
+        0,
+        4,
+        0,
+        0,
+        4,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        409,
+        5,
+        0,
+        0,
+        7,
+        5,
+        10,
+        73
+      ],
+      [
+        0,
+        1,
+        547,
+        1,
+        3,
+        5,
+        0,
+        1,
+        1
+      ],
+      [
+        2,
+        1,
+        2,
+        155,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        11,
+        2,
+        286,
+        39,
+        3,
+        0,
+        3
+      ],
+      [
+        1,
+        3,
+        3,
+        2,
+        49,
+        304,
+        3,
+        0,
+        3
+      ],
+      [
+        0,
+        8,
+        0,
+        0,
+        0,
+        3,
+        232,
+        0,
+        8
+      ],
+      [
+        0,
+        22,
+        2,
+        0,
+        0,
+        1,
+        1,
+        34,
+        5
+      ],
+      [
+        1,
+        49,
+        0,
+        0,
+        1,
+        3,
+        5,
+        2,
+        413
+      ]
+    ],
+    "samples": 2751
+  },
+  "last_aggregation_epoch": 120,
+  "initialization": {
+    "kind": "local_checkpoint",
+    "path": "D:\\Wangshiyu\\Work1SFL\\code\\code_v2\\resnet18-f37072fd.pth",
+    "sha256": "f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec",
+    "head_reinitialized": true,
+    "legacy_bn_counters_initialized": [
+      "bn1.num_batches_tracked",
+      "layer1.0.bn1.num_batches_tracked",
+      "layer1.0.bn2.num_batches_tracked",
+      "layer1.1.bn1.num_batches_tracked",
+      "layer1.1.bn2.num_batches_tracked",
+      "layer2.0.bn1.num_batches_tracked",
+      "layer2.0.bn2.num_batches_tracked",
+      "layer2.0.downsample.1.num_batches_tracked",
+      "layer2.1.bn1.num_batches_tracked",
+      "layer2.1.bn2.num_batches_tracked",
+      "layer3.0.bn1.num_batches_tracked",
+      "layer3.0.bn2.num_batches_tracked",
+      "layer3.0.downsample.1.num_batches_tracked",
+      "layer3.1.bn1.num_batches_tracked",
+      "layer3.1.bn2.num_batches_tracked",
+      "layer4.0.bn1.num_batches_tracked",
+      "layer4.0.bn2.num_batches_tracked",
+      "layer4.0.downsample.1.num_batches_tracked",
+      "layer4.1.bn1.num_batches_tracked",
+      "layer4.1.bn2.num_batches_tracked"
+    ]
+  },
+  "data_fingerprint": "2f5ca8efe45618e6e751fc21d4e21319ced1496d67b6bf84bccf236bd18bc51a",
+  "hardware_profile_measured": false,
+  "failure": null,
+  "wall_s": 5588.9713681000285,
+  "code_sha256": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177",
+  "code_version": {
+    "git_commit": "2afbe99005254b39547ca1433d3fe84b2310ff84",
+    "git_dirty": false,
+    "source_sha256": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177",
+    "source_files_sha256": {
+      "code_v4/fixed_split_resources.py": "7ea6db9f4c3798069f6ad87e0137da091bb5a3fef91a37022b652baf272763fc",
+      "code_v4/experiment.py": "5b93a9456eb00cbb432ece14efb655e3c367eb7d66da5846851fb2bea5e7dd68",
+      "code_v4/results1122_config.json": "a07cc46ff3197339ac73fa6613cc84bc6d3656e1e22a381dad18b4e29d990221",
+      "code_v2/uav_sfl.py": "48b95f1780e196c4ed0f0b252fad49d776504619545996715d67fb4b3692d177"
+    },
+    "source_bundle_sha256": "9ebb0b95f7a81e981acd73f4caec3b92602a356daf38281ad67810ad9479f979"
+  },
+  "comparison_note": "未完成任务不得将低能耗解释为节能；实时时间策略可能使用不同数据快照。",
+  "last_aggregated_test": {
+    "loss": 0.4839278903272417,
+    "accuracy": 0.8677777777777778,
+    "macro_f1": 0.815797688528957,
+    "confusion": [
+      [
+        11,
+        0,
+        3,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        418,
+        2,
+        0,
+        0,
+        6,
+        4,
+        16,
+        59
+      ],
+      [
+        0,
+        2,
+        549,
+        0,
+        2,
+        4,
+        1,
+        2,
+        0
+      ],
+      [
+        2,
+        4,
+        6,
+        141,
+        3,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        6,
+        1,
+        283,
+        46,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        5,
+        5,
+        2,
+        54,
+        303,
+        2,
+        1,
+        1
+      ],
+      [
+        0,
+        7,
+        0,
+        0,
+        0,
+        0,
+        228,
+        0,
+        18
+      ],
+      [
+        0,
+        15,
+        4,
+        0,
+        0,
+        0,
+        0,
+        23,
+        2
+      ],
+      [
+        0,
+        40,
+        2,
+        2,
+        0,
+        6,
+        14,
+        1,
+        387
+      ]
+    ],
+    "samples": 2700
+  },
+  "best_validation_model_test": {
+    "loss": 0.48406668623288474,
+    "accuracy": 0.8681481481481481,
+    "macro_f1": 0.816796579070023,
+    "confusion": [
+      [
+        11,
+        0,
+        3,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        419,
+        2,
+        0,
+        0,
+        6,
+        4,
+        15,
+        59
+      ],
+      [
+        0,
+        3,
+        548,
+        0,
+        2,
+        4,
+        1,
+        2,
+        0
+      ],
+      [
+        2,
+        4,
+        6,
+        141,
+        3,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        6,
+        1,
+        287,
+        42,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        5,
+        5,
+        2,
+        57,
+        300,
+        2,
+        1,
+        1
+      ],
+      [
+        0,
+        7,
+        0,
+        0,
+        0,
+        0,
+        229,
+        0,
+        17
+      ],
+      [
+        0,
+        14,
+        4,
+        0,
+        1,
+        0,
+        0,
+        23,
+        2
+      ],
+      [
+        0,
+        41,
+        2,
+        2,
+        0,
+        6,
+        14,
+        1,
+        386
+      ]
+    ],
+    "samples": 2700
+  }
+}
